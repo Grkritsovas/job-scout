@@ -32,6 +32,7 @@ class AdminUiTests(unittest.TestCase):
                     "summary": "Python projects.",
                     "target_roles": [{"id": "swe"}],
                 },
+                "job_preferences": {"location": "Greece"},
             }
         )
 
@@ -42,12 +43,18 @@ class AdminUiTests(unittest.TestCase):
         self.assertEqual(1, len(profiles))
         self.assertEqual("demo_recipient", profiles[0]["id"])
         self.assertEqual("Greek", profiles[0]["language"])
+        self.assertEqual("Greece", profiles[0]["location"])
         self.assertEqual(["swe"], profiles[0]["target_roles"])
 
         loaded = self.controller.get_profile("demo_recipient")
         self.assertEqual("recipient@example.com", loaded["summary"]["email"])
         self.assertEqual("Greek", loaded["summary"]["language"])
+        self.assertEqual("Greece", loaded["summary"]["location"])
         self.assertEqual("Greek", loaded["profile"]["delivery"]["language"])
+        self.assertEqual(
+            "Greece",
+            loaded["profile"]["job_preferences"]["location"],
+        )
         self.assertEqual(0.42, loaded["profile"]["matching"]["semantic_threshold"])
 
     def test_validate_profile_reports_normalization_errors(self):

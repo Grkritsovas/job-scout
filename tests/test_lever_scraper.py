@@ -4,6 +4,7 @@ from unittest.mock import Mock, patch
 from scrapers.lever_scraper import (
     DEFAULT_LEVER_API_HOST,
     EU_LEVER_API_HOST,
+    collect_site_jobs,
     fetch_lever_jobs,
     get_job_locations,
     get_primary_location,
@@ -78,6 +79,42 @@ class LeverScraperTests(unittest.TestCase):
                 ]
             ),
         )
+
+    @patch("scrapers.lever_scraper.fetch_job_description_details")
+    @patch("scrapers.lever_scraper.fetch_lever_jobs")
+    def test_collect_site_jobs_accepts_greece_location_preset(
+        self,
+        mock_fetch_lever_jobs,
+        mock_fetch_job_description_details,
+    ):
+        mock_fetch_lever_jobs.return_value = [
+            {
+                "id": "job-gr",
+                "text": "Marketing Assistant",
+                "hostedUrl": "https://jobs.eu.lever.co/example/job-gr",
+                "categories": {
+                    "location": "Remote - Greece",
+                    "allLocations": ["Greece"],
+                },
+            }
+        ]
+        mock_fetch_job_description_details.return_value = {
+            "description": "Support campaigns.",
+            "status": "visible_text",
+            "looks_like_html": False,
+        }
+
+        jobs = collect_site_jobs(
+            {
+                "site": "example",
+                "preferred_api_host": EU_LEVER_API_HOST,
+            },
+            set(),
+            location_presets=["Greece"],
+        )
+
+        self.assertEqual(1, len(jobs))
+        self.assertEqual("Remote - Greece, Greece", jobs[0]["location"])
 
     @patch("scrapers.lever_scraper.requests.get")
     def test_fetch_lever_jobs_falls_back_to_eu_api_after_standard_404(self, mock_get):

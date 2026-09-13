@@ -101,7 +101,7 @@ function renderProfileList() {
     button.innerHTML = `
       <strong>${escapeHtml(profile.id)}</strong>
       <span>${escapeHtml(profile.email || "-")}</span>
-      <span>${profile.enabled ? "enabled" : "disabled"} - ${escapeHtml(profile.language || "default language")} - ${escapeHtml((profile.target_roles || []).join(", ") || "no roles")}</span>
+      <span>${profile.enabled ? "enabled" : "disabled"} - ${escapeHtml(profile.location || "UK")} - ${escapeHtml(profile.language || "default language")} - ${escapeHtml((profile.target_roles || []).join(", ") || "no roles")}</span>
     `;
     button.addEventListener("click", () => selectProfile(profile.id));
     els.profileList.appendChild(button);
@@ -122,7 +122,7 @@ function newProfile() {
   state.selectedProfileId = "";
   state.versions = [];
   renderProfileForm(defaultProfile());
-  renderSelectedProfile({ id: "new-recipient", email: "recipient@example.com", language: "", target_roles: ["swe"], enabled: true });
+  renderSelectedProfile({ id: "new-recipient", email: "recipient@example.com", language: "", location: "UK", target_roles: ["swe"], enabled: true });
   renderProfileVersions([]);
   setProfileStatus("", "");
   renderProfileList();
@@ -258,6 +258,7 @@ function renderProfileForm(profile) {
       rolesField(normalized.candidate.target_roles),
     ].join(""))}
     ${profileSection("Job Preferences", "preferences", [
+      selectField("job_preferences.location", "preferences_location", normalized.job_preferences.location, ["UK", "Greece"]),
       numberField("job_preferences.target_seniority.max_explicit_years", "seniority_max_explicit_years", normalized.job_preferences.target_seniority.max_explicit_years, "1"),
       numberField("job_preferences.target_seniority.boost_multiplier", "seniority_boost_multiplier", normalized.job_preferences.target_seniority.boost_multiplier, "0.05"),
       textareaField("job_preferences.target_seniority.boost_title_terms", "seniority_boost_title_terms", normalized.job_preferences.target_seniority.boost_title_terms.join("\n"), 4),
@@ -368,6 +369,7 @@ function readProfileEditor() {
       target_roles: readRoles(),
     },
     job_preferences: {
+      location: fieldValue("preferences_location"),
       target_seniority: {
         max_explicit_years: optionalNumber("seniority_max_explicit_years"),
         boost_multiplier: optionalNumber("seniority_boost_multiplier"),
@@ -417,6 +419,7 @@ function syncProfilePreview() {
       id: profile.id,
       email: profile.delivery.email,
       language: profile.delivery.language,
+      location: profile.job_preferences.location,
       enabled: profile.enabled,
       target_roles: profile.candidate.target_roles.map((role) => role.id).filter(Boolean),
     });
@@ -428,8 +431,21 @@ function syncProfilePreview() {
 function renderSelectedProfile(summary) {
   const roles = (summary?.target_roles || []).join(", ") || "no roles";
   const language = summary?.language || "default language";
+  const location = summary?.location || "UK";
   els.selectedProfileTitle.textContent = summary?.id || "No profile selected";
-  els.selectedProfileMeta.textContent = `${summary?.email || "-"} - ${summary?.enabled ? "enabled" : "disabled"} - ${language} - ${roles}`;
+  els.selectedProfileMeta.textContent = `${summary?.email || "-"} - ${summary?.enabled ? "enabled" : "disabled"} - ${location} - ${language} - ${roles}`;
+}
+
+function selectField(path, name, value, options) {
+  const renderedOptions = options.map((option) => `
+    <option value="${escapeAttr(option)}" ${option === value ? "selected" : ""}>${escapeHtml(option)}</option>
+  `).join("");
+  return `
+    <label class="field-row">
+      <span><code>${escapeHtml(path)}</code></span>
+      <select data-field="${escapeAttr(name)}">${renderedOptions}</select>
+    </label>
+  `;
 }
 
 function setProfileStatus(message, kind) {
@@ -466,6 +482,7 @@ function normalizeProfileForForm(profile) {
       })),
     },
     job_preferences: {
+      location: preferences.location || "UK",
       target_seniority: {
         max_explicit_years: seniority.max_explicit_years ?? "",
         boost_multiplier: seniority.boost_multiplier ?? "",
@@ -513,6 +530,7 @@ function defaultProfile() {
       ],
     },
     job_preferences: {
+      location: "UK",
       target_seniority: {
         max_explicit_years: 1,
         boost_multiplier: 1.2,

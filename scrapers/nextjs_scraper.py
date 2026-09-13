@@ -7,7 +7,7 @@ from config.target_config import load_nextjs_targets
 from shared.company_names import get_company_name_from_url
 from shared.descriptions import HEADERS, fetch_job_description_details
 from shared.job_urls import normalize_seed_url, sanitize_job_url
-from shared.locations import format_locations, is_uk_location
+from shared.locations import format_locations, is_location_match
 
 
 def load_urls(urls=None):
@@ -67,10 +67,10 @@ def get_job_locations(job):
     ]
 
 
-def collect_url_jobs(url, seen_urls, diagnostics=None):
+def collect_url_jobs(url, seen_urls, diagnostics=None, location_presets=None):
     counts = {
         "fetched_jobs": 0,
-        "uk_jobs": 0,
+        "location_jobs": 0,
         "url_ok_jobs": 0,
         "new_jobs": 0,
         "description_ok_jobs": 0,
@@ -100,9 +100,9 @@ def collect_url_jobs(url, seen_urls, diagnostics=None):
             target_value=url,
         )
         locations = get_job_locations(job)
-        if any(locations) and not is_uk_location(locations):
+        if any(locations) and not is_location_match(locations, location_presets):
             continue
-        counts["uk_jobs"] += 1
+        counts["location_jobs"] += 1
 
         if not job_url:
             continue
@@ -148,9 +148,9 @@ def collect_url_jobs(url, seen_urls, diagnostics=None):
         if not counts["sample_title"]:
             counts["sample_title"] = title.strip()
 
-    if counts["fetched_jobs"] and not counts["uk_jobs"]:
-        counts["reason"] = "no_uk_jobs"
-    elif counts["uk_jobs"] and not counts["url_ok_jobs"]:
+    if counts["fetched_jobs"] and not counts["location_jobs"]:
+        counts["reason"] = "no_matching_location_jobs"
+    elif counts["location_jobs"] and not counts["url_ok_jobs"]:
         counts["reason"] = "no_valid_urls"
     elif counts["url_ok_jobs"] and not counts["new_jobs"]:
         counts["reason"] = "already_seen_or_duplicate"
@@ -167,8 +167,15 @@ def collect_url_jobs(url, seen_urls, diagnostics=None):
     return matches
 
 
-def collect_jobs(seen_urls, urls=None, diagnostics=None):
+def collect_jobs(seen_urls, urls=None, diagnostics=None, location_presets=None):
     matches = []
     for url in load_urls(urls):
-        matches.extend(collect_url_jobs(url, seen_urls, diagnostics))
+        matches.extend(
+            collect_url_jobs(
+                url,
+                seen_urls,
+                diagnostics,
+                location_presets=location_presets,
+            )
+        )
     return matches

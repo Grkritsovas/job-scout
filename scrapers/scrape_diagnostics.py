@@ -44,7 +44,7 @@ class ScrapeDiagnostics:
             print(
                 f"[scrape:{source}:{target}] "
                 f"fetched={payload.get('fetched_jobs', 0)} "
-                f"uk={payload.get('uk_jobs', 0)} "
+                f"location={payload.get('location_jobs', 0)} "
                 f"url_ok={payload.get('url_ok_jobs', 0)} "
                 f"new={payload.get('new_jobs', 0)} "
                 f"desc_ok={payload.get('description_ok_jobs', 0)} "

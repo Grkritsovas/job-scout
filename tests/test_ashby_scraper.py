@@ -112,6 +112,41 @@ class AshbyScraperTests(unittest.TestCase):
         self.assertEqual(1, len(jobs))
         self.assertEqual("Software Engineer", jobs[0]["title"])
 
+    @patch("scrapers.ashby_scraper.fetch_job_description_details")
+    @patch("scrapers.ashby_scraper.fetch_ashby_jobs")
+    def test_collect_company_jobs_accepts_greece_location_preset(
+        self,
+        mock_fetch_ashby_jobs,
+        mock_fetch_job_description_details,
+    ):
+        mock_fetch_ashby_jobs.return_value = [
+            {
+                "id": "job-gr",
+                "title": "Marketing Coordinator",
+                "locationName": "Remote - Greece",
+                "locationId": "greece-id",
+                "secondaryLocations": [],
+            }
+        ]
+        mock_fetch_job_description_details.return_value = {
+            "description": "Support campaigns.",
+            "status": "visible_text",
+            "looks_like_html": False,
+        }
+
+        jobs = collect_company_jobs(
+            {
+                "company": "example",
+                "location_ids": set(),
+                "label": "example",
+            },
+            set(),
+            location_presets=["Greece"],
+        )
+
+        self.assertEqual(1, len(jobs))
+        self.assertEqual("Remote - Greece", jobs[0]["location"])
+
 
 if __name__ == "__main__":
     unittest.main()

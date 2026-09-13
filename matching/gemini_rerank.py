@@ -30,6 +30,55 @@ RETRYABLE_GEMINI_ERROR_MARKERS = (
     "timeout",
     "unavailable",
 )
+DOMAIN_MISMATCH_PRESETS = (
+    (
+        "marketing",
+        re.compile(r"\b(?:market|marketer|marketing|seo|content)\b"),
+        (
+            "Marketing mismatch example: Product Marketing Manager for a junior "
+            "marketing-assistant target. Campaign and content overlap is not enough "
+            "when the role requires ownership of go-to-market strategy, product "
+            "positioning, sales enablement, and several years of B2B experience."
+        ),
+    ),
+    (
+        "software",
+        re.compile(
+            r"\b(?:software|swe|sde|developer|backend|frontend|full stack|fullstack|web)\b"
+        ),
+        (
+            "Software mismatch example: Platform or SRE Engineer for a general junior "
+            "software-engineering target. Python overlap is not enough when Kubernetes, "
+            "Terraform, observability, incident response, and production on-call "
+            "ownership are the core job."
+        ),
+    ),
+    (
+        "data",
+        re.compile(r"\b(?:data|analytics?|business intelligence|bi)\b"),
+        (
+            "Data mismatch example: Senior Data Engineer for an early-career data "
+            "target. Shared Python and SQL are not enough when the role requires "
+            "independent ownership of production pipelines, warehouse architecture, "
+            "Spark or Kafka, and operational reliability."
+        ),
+    ),
+    (
+        "ai_ml",
+        re.compile(r"\b(?:ai|ml|machine learning|artificial intelligence|llm)\b"),
+        (
+            "AI/ML mismatch example: ML Platform Engineer for a junior applied-ML "
+            "target. Model and Python overlap is not enough when the role centers on "
+            "production serving, MLOps infrastructure, cluster operations, and "
+            "large-scale deployment ownership."
+        ),
+    ),
+)
+GENERIC_MISMATCH_EXAMPLE = (
+    "Mismatch example: a role can share broad keywords or tools with a target profile "
+    "and still be a poor match when its seniority, core specialty, or ownership scope "
+    "requires experience the candidate context does not support."
+)
 _GEMINI_CALL_LIMITER = threading.BoundedSemaphore(GEMINI_CONCURRENCY_CAP)
 PASS_ONE_JSON_SCHEMA = {
     "type": "object",
@@ -395,13 +444,28 @@ def _add_junior_targeting_rule(instructions, recipient_profile):
 
     instructions["junior_targeting_rule"] = (
         "This profile targets junior or early-career roles. Treat wording like "
-        "experienced, own end-to-end, production systems at scale, strong backend "
-        "experience, and required technologies missing from the candidate context "
+        "experienced, own end-to-end, operate at scale, deep professional experience, "
+        "and required specialist tools missing from the candidate context "
         "as significant stretch signals. Do not reject automatically: keep the role "
         "only when the job explicitly says junior, associate, graduate, entry-level, "
         "open to learning, or accepts academic/project experience, or when the "
         "candidate context shows directly comparable evidence."
     )
+
+
+def _add_domain_mismatch_guidance(instructions, recipient_profile):
+    profile_terms = " ".join(
+        f"{spec['id'].replace('_', ' ')} {spec['label']}"
+        for spec in build_profile_specs(recipient_profile)
+    ).lower()
+    examples = [
+        example
+        for _domain, pattern, example in DOMAIN_MISMATCH_PRESETS
+        if pattern.search(profile_terms)
+    ]
+    instructions["domain_mismatch_examples"] = examples or [
+        GENERIC_MISMATCH_EXAMPLE
+    ]
 
 
 def _build_pass_one_prompt(recipient_profile, jobs, description_chars):
@@ -414,12 +478,12 @@ def _build_pass_one_prompt(recipient_profile, jobs, description_chars):
             "Separate domain relevance, skill overlap, and realistic employability. "
             "A role can have strong thematic relevance but still be a weak application "
             "target when hireability is blocked by seniority, ownership scope, "
-            "unsupported core stack, or specialist domain/platform requirements."
+            "unsupported core tools, or specialist domain requirements."
         ),
         "hard_requirement_rule": (
             "Penalize hard requirements more heavily than rewarding related domains. "
-            "Required production ownership, required technologies absent from the "
-            "candidate context, and specialist platform or domain experience should "
+            "Required independent ownership, required tools absent from the "
+            "candidate context, and specialist domain experience should "
             "usually make a role weak unless the job text explicitly accepts learning "
             "or project/academic evidence."
         ),
@@ -441,13 +505,6 @@ def _build_pass_one_prompt(recipient_profile, jobs, description_chars):
             "Reject obvious mismatches and roles where the match relies mainly "
             "on stretched tool overlap, seniority, or unsupported domain depth."
         ),
-        "bad_match_example": (
-            "Bad match example: Quantitative Freight Analyst - Dry Bulk for an "
-            "early-career Computer Science and AI graduate. Shared signals like "
-            "Python, forecasting, analytics, or machine learning are not enough "
-            "when the role expects an experienced quantitative analyst with "
-            "specialist freight-market ownership and domain depth."
-        ),
         "scope_rule": (
             "Reject roles whose scope, title, or description indicate seniority, "
             "independent ownership, management, strategy, consulting, or specialist "
@@ -457,16 +514,10 @@ def _build_pass_one_prompt(recipient_profile, jobs, description_chars):
             "Be especially cautious with titles like manager, lead, senior, staff, "
             "principal, director, strategist, consultant, partner, or specialist."
         ),
-        "domain_depth_rule": (
-            "Reject roles that depend on existing niche domain depth, such as freight, "
-            "quant finance, maritime, or other specialist commercial knowledge not "
-            "supported by the candidate context."
-        ),
-        "infrastructure_scope_rule": (
-            "Reject infrastructure, SRE, platform, cloud operations, and internal tooling "
-            "roles when Kubernetes, Terraform, CI/CD ownership, observability, incident "
-            "response, 24x7 on-call, GPU clusters, or cloud operations are core duties, "
-            "unless the target profiles explicitly include that infrastructure scope."
+        "specialism_rule": (
+            "Reject roles that depend on niche domain depth, specialist tooling, or "
+            "operational ownership not supported by the target profiles and candidate "
+            "context."
         ),
         "comparison_rule": (
             "Judge each role on its own merits. "
@@ -515,6 +566,7 @@ def _build_pass_one_prompt(recipient_profile, jobs, description_chars):
         )
     _add_salary_rule(instructions, recipient_profile)
     _add_junior_targeting_rule(instructions, recipient_profile)
+    _add_domain_mismatch_guidance(instructions, recipient_profile)
     _add_communication_language_rule(instructions, recipient_profile)
     _add_extra_guidance(
         instructions,
@@ -567,8 +619,8 @@ def _build_pass_two_prompt(recipient_profile, candidates, description_chars):
         ),
         "hard_requirement_rule": (
             "Penalize hard requirements more heavily than rewarding related domains. "
-            "Required production ownership, required technologies absent from the "
-            "candidate context, and specialist platform or domain experience should "
+            "Required independent ownership, required tools absent from the "
+            "candidate context, and specialist domain experience should "
             "usually make a role weaker than a less glamorous but more hireable match."
         ),
         "semantic_hint_rule": (
@@ -590,17 +642,10 @@ def _build_pass_two_prompt(recipient_profile, candidates, description_chars):
             "Reject roles whose final case depends on stretched reasoning, domain-specific "
             "ownership, or seniority the candidate does not clearly have."
         ),
-        "infrastructure_scope_rule": (
-            "Drop infrastructure, SRE, platform, cloud operations, and internal tooling "
-            "roles when Kubernetes, Terraform, CI/CD ownership, observability, incident "
-            "response, 24x7 on-call, GPU clusters, or cloud operations are core duties, "
-            "unless the target profiles explicitly include that infrastructure scope."
-        ),
-        "bad_match_example": (
-            "Example to reject: Quantitative Freight Analyst - Dry Bulk for an "
-            "early-career Computer Science and AI graduate. Shared Python, forecasting, "
-            "or analytics overlap is not enough when the role expects experienced "
-            "quantitative ownership and freight-market depth."
+        "specialism_rule": (
+            "Drop roles that depend on niche domain depth, specialist tooling, or "
+            "operational ownership not supported by the target profiles and candidate "
+            "context."
         ),
         "comparison_rule": (
             "Use the candidate profiles as the main rule. "
@@ -639,6 +684,7 @@ def _build_pass_two_prompt(recipient_profile, candidates, description_chars):
         )
     _add_salary_rule(instructions, recipient_profile)
     _add_junior_targeting_rule(instructions, recipient_profile)
+    _add_domain_mismatch_guidance(instructions, recipient_profile)
     _add_communication_language_rule(instructions, recipient_profile)
     _add_extra_guidance(
         instructions,

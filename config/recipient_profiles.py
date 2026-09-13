@@ -13,6 +13,7 @@ from matching.ranking import (
     DEFAULT_MIN_PROFILE_SCORE,
     DEFAULT_SALARY_PENALTY_MAX,
 )
+from shared.locations import DEFAULT_LOCATION_PRESET, normalize_location_preset
 
 
 def _slugify(value):
@@ -170,7 +171,7 @@ def normalize_grouped_profile(profile, index=0, sender_email=""):
     )
     _reject_unknown_keys(
         preferences_config,
-        {"target_seniority", "salary"},
+        {"location", "target_seniority", "salary"},
         "job_preferences",
     )
     _reject_unknown_keys(
@@ -218,6 +219,9 @@ def normalize_grouped_profile(profile, index=0, sender_email=""):
             "target_roles": _canonical_target_roles(candidate_config),
         },
         "job_preferences": {
+            "location": normalize_location_preset(
+                preferences_config.get("location") or DEFAULT_LOCATION_PRESET
+            ),
             "target_seniority": {
                 "max_explicit_years": _to_optional_int(
                     seniority_config.get("max_explicit_years")
@@ -329,6 +333,9 @@ def _to_runtime_profile(grouped_profile):
         "email": grouped_profile["delivery"]["email"],
         "communication_language": _normalize_text(
             grouped_profile["delivery"].get("language")
+        ),
+        "location_preset": normalize_location_preset(
+            grouped_profile["job_preferences"].get("location")
         ),
         "semantic_profiles": semantic_profiles,
         "semantic_profile_texts": semantic_profile_texts,

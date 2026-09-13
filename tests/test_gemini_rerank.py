@@ -236,8 +236,9 @@ class GeminiRerankTests(unittest.TestCase):
         self.assertIn('"student_programme_rule"', first_prompt)
         self.assertIn("current-student status", first_prompt)
         self.assertIn("Do not reject an internship merely", first_prompt)
-        self.assertIn('"infrastructure_scope_rule"', first_prompt)
-        self.assertIn("24x7 on-call", first_prompt)
+        self.assertIn('"domain_mismatch_examples"', first_prompt)
+        self.assertIn("Software mismatch example", first_prompt)
+        self.assertIn("Data mismatch example", first_prompt)
         self.assertIn('"fit_dimension_rule"', first_prompt)
         self.assertIn("strong thematic relevance", first_prompt)
         self.assertIn('"hard_requirement_rule"', first_prompt)
@@ -263,7 +264,9 @@ class GeminiRerankTests(unittest.TestCase):
         )
         self.assertIn('"student_programme_rule"', second_prompt)
         self.assertIn("Do not drop an internship merely", second_prompt)
-        self.assertIn('"infrastructure_scope_rule"', second_prompt)
+        self.assertIn('"domain_mismatch_examples"', second_prompt)
+        self.assertIn("Software mismatch example", second_prompt)
+        self.assertIn("Data mismatch example", second_prompt)
         self.assertIn('"fit_dimension_rule"', second_prompt)
         self.assertIn('"hard_requirement_rule"', second_prompt)
         self.assertIn('"semantic_hint_rule"', second_prompt)
@@ -288,7 +291,7 @@ class GeminiRerankTests(unittest.TestCase):
         )
 
         excerpt = payload["description_excerpt"]
-        self.assertEqual(4000, gemini_rerank_module.DEFAULT_DESCRIPTION_CHARS)
+        self.assertEqual(8000, gemini_rerank_module.DEFAULT_DESCRIPTION_CHARS)
         self.assertGreater(len(excerpt), 1600)
         self.assertTrue(excerpt.startswith("About the role"))
         self.assertNotIn("Company intro", excerpt)
@@ -314,6 +317,29 @@ class GeminiRerankTests(unittest.TestCase):
 
         self.assertNotIn('"junior_targeting_rule"', general_prompt)
         self.assertIn('"junior_targeting_rule"', junior_prompt)
+
+    def test_domain_mismatch_examples_follow_target_role_words(self):
+        marketing_prompt = gemini_rerank_module._build_pass_one_prompt(
+            {
+                "semantic_profiles": ["growth_marketing_coordinator"],
+                "semantic_profile_texts": {},
+            },
+            [make_job(1)],
+            gemini_rerank_module.DEFAULT_DESCRIPTION_CHARS,
+        )
+        software_prompt = gemini_rerank_module._build_pass_one_prompt(
+            {
+                "semantic_profiles": ["sde"],
+                "semantic_profile_texts": {},
+            },
+            [make_job(1)],
+            gemini_rerank_module.DEFAULT_DESCRIPTION_CHARS,
+        )
+
+        self.assertIn("Marketing mismatch example", marketing_prompt)
+        self.assertNotIn("Software mismatch example", marketing_prompt)
+        self.assertIn("Software mismatch example", software_prompt)
+        self.assertNotIn("Marketing mismatch example", software_prompt)
 
     def test_rerank_uses_top_n_and_splits_batches(self):
         jobs = [make_job(index) for index in range(1, 13)]

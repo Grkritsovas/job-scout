@@ -1,6 +1,15 @@
 import re
 
 
+DEFAULT_LOCATION_PRESET = "UK"
+LOCATION_PRESET_ALIASES = {
+    "gb": "UK",
+    "greece": "Greece",
+    "gr": "Greece",
+    "uk": "UK",
+    "united kingdom": "UK",
+}
+
 UK_LOCATION_TERMS = {
     "aberdeen",
     "bath",
@@ -103,6 +112,24 @@ COUNTRY_LEVEL_UK_PATTERNS = [
     r"\bscotland\b",
     r"\bnorthern ireland\b",
 ]
+
+COUNTRY_LEVEL_GREECE_PATTERNS = [
+    r"\bgreece\b",
+    r"\bgr\b",
+    "\u03b5\u03bb\u03bb\u03ac\u03b4\u03b1",
+    "\u03b5\u03bb\u03bb\u03ac\u03c2",
+]
+
+GREECE_LOCATION_TERMS = {
+    "athens",
+    "attica",
+    "crete",
+    "heraklion",
+    "patras",
+    "thessaloniki",
+    "\u03b1\u03b8\u03ae\u03bd\u03b1",
+    "\u03b8\u03b5\u03c3\u03c3\u03b1\u03bb\u03bf\u03bd\u03af\u03ba\u03b7",
+}
 
 FOREIGN_LOCATION_KEYWORDS = [
     "united states",
@@ -293,6 +320,97 @@ def get_uk_location_decision(locations):
 
 def is_uk_location(locations):
     return get_uk_location_decision(locations)["accepted"]
+
+
+def get_greece_location_decision(locations):
+    if isinstance(locations, str):
+        locations = [locations]
+
+    fallback_rejection = _decision(False, "no_match")
+
+    for location in locations:
+        if not location:
+            continue
+
+        normalized = location.lower()
+        country_pattern = next(
+            (
+                pattern
+                for pattern in COUNTRY_LEVEL_GREECE_PATTERNS
+                if re.search(pattern, normalized)
+            ),
+            "",
+        )
+        if country_pattern:
+            return _decision(True, "country_level_greece", location, country_pattern)
+
+        foreign_keyword = next(
+            (
+                keyword
+                for keyword in FOREIGN_LOCATION_KEYWORDS
+                if keyword in normalized
+            ),
+            "",
+        )
+        if foreign_keyword:
+            fallback_rejection = _decision(
+                False,
+                "foreign_keyword",
+                location,
+                foreign_keyword,
+            )
+            continue
+
+        if _contains_us_state_code(normalized):
+            fallback_rejection = _decision(
+                False,
+                "foreign_region",
+                location,
+                "us_state_code",
+            )
+            continue
+
+        for location_term in sorted(GREECE_LOCATION_TERMS):
+            if _contains_location_term(normalized, location_term):
+                return _decision(
+                    True,
+                    "greece_location_term",
+                    location,
+                    location_term,
+                )
+
+        fallback_rejection = _decision(False, "no_match", location)
+
+    return fallback_rejection
+
+
+def normalize_location_preset(value):
+    normalized = " ".join(str(value or DEFAULT_LOCATION_PRESET).lower().split())
+    preset = LOCATION_PRESET_ALIASES.get(normalized)
+    if preset:
+        return preset
+
+    supported = ", ".join(sorted(set(LOCATION_PRESET_ALIASES.values())))
+    raise ValueError(
+        f"Unsupported location preset '{value}'. Supported values: {supported}."
+    )
+
+
+def get_location_decision(locations, location_preset=DEFAULT_LOCATION_PRESET):
+    preset = normalize_location_preset(location_preset)
+    if preset == "Greece":
+        return get_greece_location_decision(locations)
+    return get_uk_location_decision(locations)
+
+
+def is_location_match(locations, location_presets=None):
+    presets = location_presets or [DEFAULT_LOCATION_PRESET]
+    if isinstance(presets, str):
+        presets = [presets]
+    return any(
+        get_location_decision(locations, preset)["accepted"]
+        for preset in presets
+    )
 
 
 def dedupe_keep_order(values):

@@ -1,6 +1,11 @@
 import unittest
 
-from shared.locations import get_uk_location_decision
+from shared.locations import (
+    get_greece_location_decision,
+    get_uk_location_decision,
+    is_location_match,
+    normalize_location_preset,
+)
 from utils import is_uk_location
 
 
@@ -36,6 +41,37 @@ class LocationFilteringTests(unittest.TestCase):
         self.assertFalse(rejected["accepted"])
         self.assertEqual("foreign_region", rejected["reason"])
         self.assertEqual("us_state_code", rejected["matched_term"])
+
+    def test_greece_preset_accepts_explicit_greek_locations(self):
+        self.assertTrue(is_location_match(["Greece"], "Greece"))
+        self.assertTrue(is_location_match(["Remote - Greece"], "Greece"))
+        self.assertTrue(is_location_match(["Athens, Attica"], "Greece"))
+        self.assertTrue(is_location_match(["Thessaloniki"], "Greece"))
+        self.assertTrue(
+            is_location_match(
+                ["\u0398\u03b5\u03c3\u03c3\u03b1\u03bb\u03bf\u03bd\u03af\u03ba\u03b7"],
+                "Greece",
+            )
+        )
+
+    def test_greece_preset_rejects_ambiguous_or_foreign_remote_locations(self):
+        self.assertFalse(is_location_match(["Remote"], "Greece"))
+        self.assertFalse(is_location_match(["Remote - Europe"], "Greece"))
+        self.assertFalse(is_location_match(["Athens, GA"], "Greece"))
+        self.assertFalse(is_location_match(["London"], "Greece"))
+
+    def test_greece_location_decision_explains_match(self):
+        decision = get_greece_location_decision(["Remote - Greece"])
+
+        self.assertTrue(decision["accepted"])
+        self.assertEqual("country_level_greece", decision["reason"])
+
+    def test_location_preset_normalization_is_limited_to_supported_values(self):
+        self.assertEqual("UK", normalize_location_preset(""))
+        self.assertEqual("UK", normalize_location_preset("United Kingdom"))
+        self.assertEqual("Greece", normalize_location_preset("gr"))
+        with self.assertRaisesRegex(ValueError, "Unsupported location preset"):
+            normalize_location_preset("Spain")
 
 
 if __name__ == "__main__":

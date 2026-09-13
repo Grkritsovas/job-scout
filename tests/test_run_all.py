@@ -17,6 +17,7 @@ from run_all import (
     merge_seen_jobs,
     process_recipient,
     recipient_worker_count,
+    required_location_presets,
     select_jobs_for_recipient,
     semantic_below_threshold_seen_jobs,
     write_run_snapshot,
@@ -133,7 +134,11 @@ class RunAllTests(unittest.TestCase):
             ) as lever_mock,
             patch("run_all.collect_nextjs_jobs", return_value=[]) as nextjs_mock,
         ):
-            jobs = collect_all_jobs(targets, diagnostics=None)
+            jobs = collect_all_jobs(
+                targets,
+                diagnostics=None,
+                location_presets=["UK", "Greece"],
+            )
 
         self.assertEqual(
             [
@@ -145,6 +150,22 @@ class RunAllTests(unittest.TestCase):
         )
         for mock in (ashby_mock, greenhouse_mock, lever_mock, nextjs_mock):
             self.assertIsInstance(mock.call_args.args[0], set)
+            self.assertEqual(
+                ["UK", "Greece"],
+                mock.call_args.kwargs["location_presets"],
+            )
+
+    def test_required_location_presets_defaults_to_uk_and_dedupes(self):
+        self.assertEqual(
+            ["UK", "Greece"],
+            required_location_presets(
+                [
+                    {"id": "one"},
+                    {"id": "two", "location_preset": "Greece"},
+                    {"id": "three", "location_preset": "UK"},
+                ]
+            ),
+        )
 
     def test_collect_all_jobs_keeps_successful_sources_when_one_source_fails(self):
         ashby_job = {**make_job(1), "source": "ashby", "target_value": "ashby"}
@@ -1080,6 +1101,10 @@ class RunAllTests(unittest.TestCase):
         sponsor_mock.assert_called_once_with()
         collect_mock.assert_called_once()
         self.assertEqual(targets, collect_mock.call_args.args[0])
+        self.assertEqual(
+            ["UK"],
+            collect_mock.call_args.kwargs["location_presets"],
+        )
         enrich_mock.assert_called_once_with(candidates, {"Example"})
         process_args = process_mock.call_args.args
         process_kwargs = process_mock.call_args.kwargs

@@ -86,6 +86,37 @@ class GreenhouseScraperTests(unittest.TestCase):
             jobs[0]["url"],
         )
 
+    @patch("scrapers.greenhouse_scraper.get_greenhouse_description")
+    @patch("scrapers.greenhouse_scraper.fetch_greenhouse_jobs")
+    def test_collect_board_jobs_accepts_greece_location_preset(
+        self,
+        mock_fetch_greenhouse_jobs,
+        mock_get_greenhouse_description,
+    ):
+        mock_fetch_greenhouse_jobs.return_value = [
+            {
+                "title": "Marketing Assistant",
+                "absolute_url": "https://boards.greenhouse.io/example/jobs/123",
+                "location": {"name": "Athens, Greece"},
+                "offices": [],
+                "content": "<p>Support campaigns.</p>",
+            }
+        ]
+        mock_get_greenhouse_description.return_value = {
+            "description": "Support campaigns.",
+            "status": "job_content",
+            "looks_like_html": False,
+        }
+
+        jobs = collect_board_jobs(
+            "example",
+            set(),
+            location_presets=["Greece"],
+        )
+
+        self.assertEqual(1, len(jobs))
+        self.assertEqual("Athens, Greece", jobs[0]["location"])
+
 
 if __name__ == "__main__":
     unittest.main()

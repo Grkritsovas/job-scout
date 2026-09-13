@@ -17,6 +17,7 @@ def make_profile(**overrides):
             "target_roles": [{"id": "swe"}],
         },
         "job_preferences": {
+            "location": "Greece",
             "target_seniority": {
                 "max_explicit_years": 1,
                 "boost_multiplier": 1.2,
@@ -54,6 +55,7 @@ class ValidateRecipientProfilesTests(unittest.TestCase):
         self.assertEqual("george", results[0]["recipient_id"])
         self.assertEqual("george@example.com", results[0]["email"])
         self.assertEqual("Greek", results[0]["language"])
+        self.assertEqual("Greece", results[0]["location"])
         self.assertEqual(["swe"], results[0]["target_roles"])
 
     def test_validate_profile_configs_collects_invalid_profile_errors(self):
@@ -94,6 +96,7 @@ class ValidateRecipientProfilesTests(unittest.TestCase):
         self.assertIn("OK profile[0]", line)
         self.assertIn("id=george", line)
         self.assertIn("language=Greek", line)
+        self.assertIn("location=Greece", line)
         self.assertIn("target_roles=swe", line)
 
 

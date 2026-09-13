@@ -152,12 +152,14 @@ class AdminController:
     def _profile_summary(profile, record=None):
         candidate = profile.get("candidate") or {}
         delivery = profile.get("delivery") or {}
+        preferences = profile.get("job_preferences") or {}
         matching = profile.get("matching") or {}
         target_roles = candidate.get("target_roles") or []
         return {
             "id": profile.get("id") or (record or {}).get("recipient_id", ""),
             "email": delivery.get("email") or profile.get("email") or "",
             "language": delivery.get("language") or "",
+            "location": preferences.get("location") or "UK",
             "enabled": bool(profile.get("enabled", True)),
             "target_roles": [
                 role.get("id") if isinstance(role, dict) else role

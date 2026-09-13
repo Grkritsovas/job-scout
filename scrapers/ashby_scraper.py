@@ -6,7 +6,7 @@ from config.target_config import load_ashby_targets
 from shared.company_names import normalize_company_name
 from shared.descriptions import HEADERS, fetch_job_description_details
 from shared.job_urls import sanitize_job_url
-from shared.locations import format_locations, is_uk_location
+from shared.locations import format_locations, is_location_match
 
 
 def normalize_ashby_target(value):
@@ -114,7 +114,12 @@ def get_job_location_ids(job):
     return {location_id for location_id in [job.get("locationId", ""), *secondary_location_ids] if location_id}
 
 
-def collect_company_jobs(target, seen_urls, diagnostics=None):
+def collect_company_jobs(
+    target,
+    seen_urls,
+    diagnostics=None,
+    location_presets=None,
+):
     company = target["company"]
     location_ids = target["location_ids"]
     target_label = target["label"] or company
@@ -123,7 +128,7 @@ def collect_company_jobs(target, seen_urls, diagnostics=None):
     company_name = normalize_company_name(company)
     counts = {
         "fetched_jobs": len(jobs),
-        "uk_jobs": 0,
+        "location_jobs": 0,
         "url_ok_jobs": 0,
         "new_jobs": 0,
         "description_ok_jobs": 0,
@@ -151,9 +156,9 @@ def collect_company_jobs(target, seen_urls, diagnostics=None):
         if location_ids:
             if not (get_job_location_ids(job) & location_ids):
                 continue
-        elif not is_uk_location(locations):
+        elif not is_location_match(locations, location_presets):
             continue
-        counts["uk_jobs"] += 1
+        counts["location_jobs"] += 1
 
         if not url:
             continue
@@ -199,9 +204,9 @@ def collect_company_jobs(target, seen_urls, diagnostics=None):
         if not counts["sample_title"]:
             counts["sample_title"] = title.strip()
 
-    if counts["fetched_jobs"] and not counts["uk_jobs"]:
-        counts["reason"] = "no_uk_jobs"
-    elif counts["uk_jobs"] and not counts["url_ok_jobs"]:
+    if counts["fetched_jobs"] and not counts["location_jobs"]:
+        counts["reason"] = "no_matching_location_jobs"
+    elif counts["location_jobs"] and not counts["url_ok_jobs"]:
         counts["reason"] = "no_valid_urls"
     elif counts["url_ok_jobs"] and not counts["new_jobs"]:
         counts["reason"] = "already_seen_or_duplicate"
@@ -218,8 +223,15 @@ def collect_company_jobs(target, seen_urls, diagnostics=None):
     return matches
 
 
-def collect_jobs(seen_urls, companies=None, diagnostics=None):
+def collect_jobs(seen_urls, companies=None, diagnostics=None, location_presets=None):
     matches = []
     for target in load_targets(companies):
-        matches.extend(collect_company_jobs(target, seen_urls, diagnostics))
+        matches.extend(
+            collect_company_jobs(
+                target,
+                seen_urls,
+                diagnostics,
+                location_presets=location_presets,
+            )
+        )
     return matches

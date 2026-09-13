@@ -9,7 +9,7 @@ from matching.filters import (
     QUALITATIVE_EXPERIENCE_REJECT_PATTERNS,
     RECIPIENT_AWARE_COMMERCIAL_TERMS,
 )
-from shared.locations import is_uk_location
+from shared.locations import DEFAULT_LOCATION_PRESET, is_location_match
 
 
 DEFAULT_MAX_YEARS_EXPERIENCE = 1
@@ -219,6 +219,11 @@ def get_hard_filter_reason(
     title = job.get("title", "")
     description = job.get("description", "")
     locations = job.get("locations") or [job.get("location", "")]
+    location_preset = DEFAULT_LOCATION_PRESET
+    if recipient_profile:
+        location_preset = recipient_profile.get("location_preset") or (
+            recipient_profile.get("job_preferences") or {}
+        ).get("location") or DEFAULT_LOCATION_PRESET
 
     if title_has_hard_reject_term(title, HARD_SENIORITY_TERMS):
         return "title_seniority"
@@ -232,7 +237,7 @@ def get_hard_filter_reason(
     if title_has_hard_reject_term(title, HARD_ELIGIBILITY_TITLE_TERMS):
         return "title_eligibility"
 
-    if not is_uk_location(locations):
+    if not is_location_match(locations, location_preset):
         return "location"
 
     if has_authorization_mismatch(description):

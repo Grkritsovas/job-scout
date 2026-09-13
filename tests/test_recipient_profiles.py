@@ -39,6 +39,7 @@ class RecipientProfilesTests(unittest.TestCase):
                     ],
                 },
                 "job_preferences": {
+                    "location": "Greece",
                     "target_seniority": {
                         "max_explicit_years": 2,
                         "boost_multiplier": 1.15,
@@ -75,6 +76,10 @@ class RecipientProfilesTests(unittest.TestCase):
         self.assertEqual("george", rows[0]["recipient_id"])
         self.assertEqual("george@example.com", rows[0]["email"])
         self.assertEqual("Greek", rows[0]["config"]["delivery"]["language"])
+        self.assertEqual(
+            "Greece",
+            rows[0]["config"]["job_preferences"]["location"],
+        )
         self.assertEqual(2, rows[0]["config"]["job_preferences"]["target_seniority"]["max_explicit_years"])
         self.assertEqual(
             "Graduated Oct 2025; not a current student.",
@@ -126,6 +131,17 @@ class RecipientProfilesTests(unittest.TestCase):
                 }
             )
 
+    def test_normalize_grouped_profile_rejects_unsupported_location(self):
+        with self.assertRaisesRegex(ValueError, "Unsupported location preset"):
+            normalize_grouped_profile(
+                {
+                    "id": "demo",
+                    "delivery": {"email": "demo@example.com"},
+                    "candidate": {"target_roles": [{"id": "swe"}]},
+                    "job_preferences": {"location": "Spain"},
+                }
+            )
+
     def test_loads_profiles_from_storage(self):
         db_path = self.test_dir / "profiles.db"
         storage = create_storage(f"sqlite:///{db_path}")
@@ -143,6 +159,7 @@ class RecipientProfilesTests(unittest.TestCase):
                             "target_roles": [{"id": "swe"}],
                         },
                         "job_preferences": {
+                            "location": "Greece",
                             "target_seniority": {
                                 "max_explicit_years": 2,
                                 "boost_multiplier": 1.1,
@@ -225,6 +242,7 @@ class RecipientProfilesTests(unittest.TestCase):
         self.assertEqual("george", profiles[0]["id"])
         self.assertEqual("george@example.com", profiles[0]["email"])
         self.assertEqual("Greek", profiles[0]["communication_language"])
+        self.assertEqual("Greece", profiles[0]["location_preset"])
         self.assertEqual(["swe"], profiles[0]["semantic_profiles"])
         self.assertEqual(2, profiles[0]["max_years_experience"])
         self.assertEqual(

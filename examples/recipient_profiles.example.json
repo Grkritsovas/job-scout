@@ -22,6 +22,7 @@
       ]
     },
     "job_preferences": {
+      "location": "UK",
       "target_seniority": {
         "max_explicit_years": 1,
         "boost_multiplier": 1.2,
@@ -52,7 +53,7 @@
     "enabled": true,
     "delivery": {
       "email": "marketing-recipient@example.com",
-      "language": ""
+      "language": "Greek"
     },
     "candidate": {
       "summary": "Early-career candidate with communication, coordination, and analytical support strengths, plus growing AI and data exposure. Best fit for junior roles with clear structure, mentoring, and room to learn on the job.",
@@ -69,6 +70,7 @@
       ]
     },
     "job_preferences": {
+      "location": "Greece",
       "target_seniority": {
         "max_explicit_years": 1,
         "boost_multiplier": 1.2,
@@ -81,10 +83,10 @@
       }
     },
     "eligibility": {
-      "needs_sponsorship": true,
-      "work_authorization_summary": "Graduate visa valid until a future expiry date; may need sponsorship after that.",
-      "check_hard_eligibility": true,
-      "use_sponsor_lookup": true
+      "needs_sponsorship": false,
+      "work_authorization_summary": "Eligible to work in Greece without sponsorship.",
+      "check_hard_eligibility": false,
+      "use_sponsor_lookup": false
     },
     "matching": {
       "semantic_threshold": 0.42

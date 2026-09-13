@@ -19,6 +19,7 @@ from scrapers.lever_scraper import collect_jobs as collect_lever_jobs
 from scrapers.nextjs_scraper import collect_jobs as collect_nextjs_jobs
 from scrapers.scrape_diagnostics import ScrapeDiagnostics
 from shared.digest import build_digest_payloads
+from shared.locations import DEFAULT_LOCATION_PRESET, normalize_location_preset
 from sponsorship import enrich_jobs, load_sponsor_company_lookup
 from storage import create_storage
 
@@ -56,7 +57,18 @@ def build_run_id():
     return f"{timestamp}-{uuid.uuid4().hex[:8]}"
 
 
-def collect_all_jobs(targets, diagnostics):
+def required_location_presets(recipient_profiles):
+    return list(
+        dict.fromkeys(
+            normalize_location_preset(
+                profile.get("location_preset") or DEFAULT_LOCATION_PRESET
+            )
+            for profile in recipient_profiles
+        )
+    )
+
+
+def collect_all_jobs(targets, diagnostics, location_presets=None):
     source_collectors = [
         (
             "ashby",
@@ -64,6 +76,7 @@ def collect_all_jobs(targets, diagnostics):
                 set(),
                 targets["ashby"],
                 diagnostics=diagnostics,
+                location_presets=location_presets,
             ),
         ),
         (
@@ -72,6 +85,7 @@ def collect_all_jobs(targets, diagnostics):
                 set(),
                 targets["greenhouse"],
                 diagnostics=diagnostics,
+                location_presets=location_presets,
             ),
         ),
         (
@@ -80,6 +94,7 @@ def collect_all_jobs(targets, diagnostics):
                 set(),
                 targets["lever"],
                 diagnostics=diagnostics,
+                location_presets=location_presets,
             ),
         ),
         (
@@ -88,6 +103,7 @@ def collect_all_jobs(targets, diagnostics):
                 set(),
                 targets["nextjs"],
                 diagnostics=diagnostics,
+                location_presets=location_presets,
             ),
         ),
     ]
@@ -722,7 +738,11 @@ def main(argv=None):
                 "company lookup data was loaded."
             )
 
-        candidates = collect_all_jobs(targets, diagnostics)
+        candidates = collect_all_jobs(
+            targets,
+            diagnostics,
+            location_presets=required_location_presets(recipient_profiles),
+        )
         enriched_candidates = enrich_jobs(candidates, sponsor_company_lookup)
 
     recipient_results = process_recipients(

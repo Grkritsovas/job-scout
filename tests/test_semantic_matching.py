@@ -99,6 +99,29 @@ class SemanticMatchingTests(unittest.TestCase):
         )
         self.assertIsNone(reason)
 
+    def test_greece_profile_uses_greece_location_filter(self):
+        greek_job = make_job(location="Remote - Greece", locations=["Remote - Greece"])
+
+        self.assertIsNone(
+            get_hard_filter_reason(
+                greek_job,
+                recipient_profile={
+                    "semantic_profiles": ["marketing_assistant"],
+                    "location_preset": "Greece",
+                },
+            )
+        )
+        self.assertEqual(
+            "location",
+            get_hard_filter_reason(
+                greek_job,
+                recipient_profile={
+                    "semantic_profiles": ["marketing_assistant"],
+                    "location_preset": "UK",
+                },
+            ),
+        )
+
     def test_get_hard_filter_reason_rejects_two_plus_years_for_junior_pipeline(self):
         reason = get_hard_filter_reason(
             make_job(description="Requires 2+ years of experience in Python."),
