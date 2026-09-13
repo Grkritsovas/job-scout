@@ -22,9 +22,16 @@ HARD_COMMERCIAL_TERMS = [
     "legal counsel",
 ]
 
-RECIPIENT_AWARE_COMMERCIAL_TERMS = {
-    "marketing",
-}
+# Match whole target-role names, not technical words in unrelated roles.
+COMMERCIAL_EXCLUSION_TECH_ROLE_PATTERN = (
+    r"(?:(?:junior|senior|staff|lead|principal|graduate|entry level|early career) )?"
+    r"(?:swe|sde|ai ml(?: engineer(?:ing)?)?|"
+    r"software development engineer|"
+    r"(?:software|backend|frontend|full stack|fullstack|data|machine learning|ml|ai) "
+    r"(?:engineer(?:ing)?|developer|development)|"
+    r"data (?:science|scientist|analyst|analytics))"
+    r"(?: (?:intern|internship|graduate|junior|senior))?"
+)
 
 HARD_ELIGIBILITY_TITLE_TERMS = []
 

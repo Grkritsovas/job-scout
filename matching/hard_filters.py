@@ -2,12 +2,16 @@ import re
 
 from matching.filters import (
     AUTHORIZATION_MISMATCH_PATTERNS,
+    COMMERCIAL_EXCLUSION_TECH_ROLE_PATTERN,
     ELIGIBILITY_REJECT_PATTERNS,
     HARD_COMMERCIAL_TERMS,
     HARD_ELIGIBILITY_TITLE_TERMS,
     HARD_SENIORITY_TERMS,
     QUALITATIVE_EXPERIENCE_REJECT_PATTERNS,
-    RECIPIENT_AWARE_COMMERCIAL_TERMS,
+)
+from matching.profile_library import (
+    get_default_semantic_profile_ids,
+    normalize_profile_id,
 )
 from shared.locations import DEFAULT_LOCATION_PRESET, is_location_match
 
@@ -74,27 +78,23 @@ def title_has_hard_reject_term(title, reject_terms):
     )
 
 
-def _profile_id_like(value):
-    return re.sub(r"[^a-z0-9]+", "_", str(value or "").lower()).strip("_")
-
-
 def _recipient_target_role_ids(recipient_profile):
     if not recipient_profile:
         return []
 
     role_ids = [
-        _profile_id_like(profile_id)
-        for profile_id in recipient_profile.get("semantic_profiles", [])
+        normalize_profile_id(profile_id)
+        for profile_id in recipient_profile.get("semantic_profiles") or []
     ]
 
     candidate_config = recipient_profile.get("candidate") or {}
     for role in candidate_config.get("target_roles") or []:
         if isinstance(role, str):
-            role_ids.append(_profile_id_like(role))
+            role_ids.append(normalize_profile_id(role))
             continue
         if isinstance(role, dict):
             role_ids.append(
-                _profile_id_like(
+                normalize_profile_id(
                     role.get("id") or role.get("profile_id") or role.get("name")
                 )
             )
@@ -102,24 +102,19 @@ def _recipient_target_role_ids(recipient_profile):
     return [role_id for role_id in role_ids if role_id]
 
 
-def _recipient_targets_term(recipient_profile, term):
-    term_id = _profile_id_like(term)
-    return any(
-        term_id in role_id
-        for role_id in _recipient_target_role_ids(recipient_profile)
-    )
-
-
 def get_commercial_reject_terms(recipient_profile=None):
-    if not recipient_profile:
+    role_ids = (
+        _recipient_target_role_ids(recipient_profile)
+        or get_default_semantic_profile_ids()
+    )
+    if all(
+        re.fullmatch(COMMERCIAL_EXCLUSION_TECH_ROLE_PATTERN, role_id.replace("_", " "))
+        for role_id in role_ids
+    ):
         return list(HARD_COMMERCIAL_TERMS)
 
-    return [
-        term
-        for term in HARD_COMMERCIAL_TERMS
-        if term not in RECIPIENT_AWARE_COMMERCIAL_TERMS
-        or not _recipient_targets_term(recipient_profile, term)
-    ]
+    # A non-tech or unknown target must not lose jobs before semantic matching.
+    return []
 
 
 def has_authorization_mismatch(description):

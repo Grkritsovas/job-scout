@@ -56,6 +56,8 @@ Recommended setup:
 
 The full step-by-step setup, variable reference, database-backed recipient profile shape, and target override documentation are in [docs/CONFIGURATION.md](docs/CONFIGURATION.md).
 
+To describe the jobs you want, introduce yourself, and set your preferences, follow [Personalizing Your Job Search](docs/PROFILE_CONFIGURATION.md). It includes plain-language examples for marketing, customer service, HR, and software roles.
+
 Starter config files and example shapes are in [examples/README.md](examples/README.md).
 
 Internal architecture notes, contributor workflows, and agent guardrails are in [docs/CONTRIBUTING.md](docs/CONTRIBUTING.md).

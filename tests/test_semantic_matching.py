@@ -1,5 +1,8 @@
 import unittest
 
+from config.recipient_profiles import _to_runtime_profile, normalize_grouped_profile
+from matching.filters import HARD_COMMERCIAL_TERMS
+from matching.hard_filters import get_commercial_reject_terms
 from semantic_matching import (
     build_profile_specs,
     extract_required_experience_years,
@@ -98,6 +101,121 @@ class SemanticMatchingTests(unittest.TestCase):
             recipient_profile={"semantic_profiles": ["marketing_assistant"]},
         )
         self.assertIsNone(reason)
+
+    def test_commercial_titles_remain_excluded_for_tech_only_targets(self):
+        for role_id in (
+            "swe", "sde", "software_engineer", "Software Engineering", "ds",
+            "data_science", "data_scientist", "data_engineer", "data_analyst",
+            "ai_ml_engineer", "ai_ml", "machine_learning_engineer",
+            "junior_software_engineer", "backend_developer", "frontend_developer",
+            "full_stack_developer", "data_science_intern",
+        ):
+            for term in HARD_COMMERCIAL_TERMS:
+                with self.subTest(role_id=role_id, term=term):
+                    self.assertEqual(
+                        "title_commercial",
+                        get_hard_filter_reason(
+                            make_job(title=term.title()),
+                            recipient_profile={"semantic_profiles": [role_id]},
+                        ),
+                    )
+
+    def test_commercial_exclusions_do_not_apply_to_non_tech_targets(self):
+        for role_id in (
+            "hr", "human_resources", "recruiter", "talent_acquisition",
+            "customer_service", "customer_support", "customer_success",
+            "digital_marketing", "seo", "content", "sales", "designer",
+            "custom_role", "software_sales", "software_engineering_recruiter",
+            "business_developer", "hr_data_analyst",
+        ):
+            for term in HARD_COMMERCIAL_TERMS:
+                with self.subTest(role_id=role_id, term=term):
+                    self.assertIsNone(
+                        get_hard_filter_reason(
+                            make_job(title=term.title()),
+                            recipient_profile={"semantic_profiles": [role_id]},
+                        ),
+                    )
+
+    def test_mixed_targets_do_not_apply_commercial_exclusions(self):
+        for role_ids in (
+            ["swe", "hr"],
+            ["customer_success", "data_science"],
+            ["swe", "seo"],
+            ["swe", "custom_role"],
+        ):
+            with self.subTest(role_ids=role_ids):
+                self.assertEqual(
+                    [],
+                    get_commercial_reject_terms({"semantic_profiles": role_ids}),
+                )
+        self.assertEqual(
+            HARD_COMMERCIAL_TERMS,
+            get_commercial_reject_terms(
+                {"semantic_profiles": ["swe", "data_science", "ai_ml_engineer"]}
+            ),
+        )
+
+    def test_missing_targets_keep_default_tech_exclusions(self):
+        for profile in (
+            None, {}, {"semantic_profiles": []}, {"semantic_profiles": None},
+            {"candidate": {"target_roles": []}},
+        ):
+            with self.subTest(profile=profile):
+                self.assertEqual(
+                    HARD_COMMERCIAL_TERMS, get_commercial_reject_terms(profile)
+                )
+
+    def test_commercial_exclusions_agree_for_grouped_and_runtime_profiles(self):
+        for roles, expected in (
+            (["software_engineer", {"name": "Data Scientist"}], HARD_COMMERCIAL_TERMS),
+            ([{"profile_id": "hr"}], []),
+            ([{"name": "Customer Service"}], []),
+            ([{"id": "seo", "name": "Digital Marketing"}], []),
+            (["swe", {"id": "recruiter"}], []),
+        ):
+            with self.subTest(roles=roles):
+                raw_profile = {
+                    "delivery": {"email": "candidate@example.com"},
+                    "candidate": {"target_roles": roles},
+                }
+                grouped_profile = normalize_grouped_profile(raw_profile)
+                runtime_profile = _to_runtime_profile(grouped_profile)
+                for profile in (raw_profile, grouped_profile, runtime_profile):
+                    self.assertEqual(expected, get_commercial_reject_terms(profile))
+
+    def test_non_tech_jobs_reach_semantic_matching(self):
+        profile = {
+            "semantic_profiles": ["hr", "customer_service", "seo"],
+            "location_preset": "Greece",
+        }
+        titles = ["Recruiter", "Customer Success Associate", "Marketing Assistant"]
+        jobs = [
+            make_job(title=title, locations=["Remote - Greece"])
+            for title in titles
+        ]
+        matcher = FakeMatcher()
+
+        ranked_jobs = rank_jobs(jobs, profile, matcher=matcher)
+
+        self.assertCountEqual(titles, [job["title"] for job in ranked_jobs])
+        self.assertEqual(len(jobs), len(matcher.scored_descriptions))
+
+    def test_non_tech_targets_still_apply_other_hard_filters(self):
+        profile = {"semantic_profiles": ["hr"], "location_preset": "Greece"}
+        for overrides, expected in (
+            ({"title": "Senior Recruiter"}, "title_seniority"),
+            ({"locations": ["London"]}, "location"),
+            ({"description": "Must be authorized to work in the US."}, "authorization"),
+            ({"description": "Must be currently enrolled in a degree."}, "eligibility"),
+            ({"description": "Requires 3+ years of experience."}, "experience"),
+        ):
+            with self.subTest(expected=expected):
+                job = make_job(title="Recruiter", locations=["Remote - Greece"])
+                job.update(overrides)
+                self.assertEqual(
+                    expected, get_hard_filter_reason(job, recipient_profile=profile)
+                )
 
     def test_greece_profile_uses_greece_location_filter(self):
         greek_job = make_job(location="Remote - Greece", locations=["Remote - Greece"])

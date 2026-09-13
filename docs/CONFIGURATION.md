@@ -2,6 +2,8 @@
 
 This project now loads recipient profiles from the database only. Runtime recipient config lives in `app_config.recipient_profiles.config_json`.
 
+For a simple walkthrough of filling in your profile, see [Personalizing Your Job Search](PROFILE_CONFIGURATION.md). It covers what to write about yourself, the jobs you want, and your preferences. This reference covers setup and technical details.
+
 ## Required Hosted Setup
 
 Required GitHub Actions secrets:
@@ -159,6 +161,7 @@ Each `config_json` record should look like this:
     ]
   },
   "job_preferences": {
+    "location": "UK",
     "target_seniority": {
       "max_explicit_years": 1,
       "boost_multiplier": 1.2,
@@ -193,19 +196,21 @@ Each `config_json` record should look like this:
 - `delivery.language`
   Optional preferred language for user-facing Gemini `why_apply` digest text, for example `Greek`. If omitted, Gemini uses its default response language.
 - `candidate.target_roles`
-  Defines the role families used for semantic matching.
+  Defines the role families used for semantic matching. See [role description examples](PROFILE_CONFIGURATION.md#choose-the-jobs-you-want). An empty list restores the built-in `swe`, `data_science`, and `ai_ml_engineer` profiles. Those profiles contain specific technical project experience; use `match_text` to replace it with the recipient's actual experience. Custom IDs without `match_text` get generic descriptions based on the ID. Gemini's preset mismatch examples are selected from role IDs and generated labels, not a separate custom `name`.
 - `candidate.target_roles[*].match_text`
   Overrides the built-in semantic profile text for that role.
 - `candidate.summary`
   Gives Gemini compact candidate context.
 - `candidate.education_status`
   Gives Gemini explicit graduate/student status. This is used for internships, placements, and student-programme judgment.
+- `job_preferences.location`
+  Selects the location preset used during ATS collection and recipient hard filtering. Supported values are `UK` and `Greece`; omitted profiles default to `UK`. Greece accepts explicit Greek locations such as `Greece`, `Athens`, `Thessaloniki`, and `Remote - Greece`, but not a countryless `Remote` label.
 - `job_preferences.target_seniority.max_explicit_years`
-  Controls the regex-based experience filter.
+  Controls the regex-based experience filter. Blank or `null` restores the default `1`. Ranges use the upper bound: `1-3 years` is treated as `3`. Fixed senior-title and experience-phrase exclusions still apply regardless of this limit.
 - `job_preferences.target_seniority.boost_multiplier`
-  Multiplies semantic scores for titles that match the configured boost terms.
+  Multiplies semantic scores for titles that match the configured boost terms. The default is `1.2`; use `1.0` to disable the boost.
 - `job_preferences.target_seniority.boost_title_terms`
-  Terms that trigger the junior-title boost.
+  Terms that trigger the junior-title boost. An empty list restores the default junior/graduate terms. This is a preference, not a requirement that every job contain one of these words.
 - `job_preferences.salary.preferred_max_gbp`
   Soft salary preference ceiling.
 - `job_preferences.salary.hard_cap_gbp`
@@ -217,23 +222,23 @@ Each `config_json` record should look like this:
 - `eligibility.work_authorization_summary`
   Gives Gemini compact UK work authorization context, such as visa status, settled/pre-settled status, citizenship, or residency facts.
 - `eligibility.check_hard_eligibility`
-  Adds stricter Gemini judgment for SC/DV clearance, nationality restrictions, and explicit UK residency requirements.
+  Adds stricter Gemini judgment for SC/DV clearance, nationality restrictions, and explicit UK residency requirements. It does not disable earlier authorization or student-eligibility regex checks when off. The authorization summary is supplied to Gemini either way.
 - `eligibility.use_sponsor_lookup`
   Adds sponsor-license lookup markers based on the sponsor-company CSV.
 - `matching.semantic_threshold`
-  Minimum ranking score required after semantic scoring, title boost, and salary penalty.
+  Minimum ranking score required after semantic scoring, title boost, and salary penalty. The default is `0.42`. Improve role descriptions before tuning this; try `0.40` to admit weaker matches or `0.45` to require stronger ones, comparing the same jobs via replay. This similarity score is not a hiring probability and cannot override hard-filter rejections.
 - `llm_review.extra_screening_guidance`
   Extra natural-language rules injected into Gemini pass one.
 - `llm_review.extra_final_ranking_guidance`
-  Extra natural-language rules injected into Gemini pass two.
+  Extra natural-language rules injected into Gemini pass two. See [plain-language instruction examples](PROFILE_CONFIGURATION.md#say-what-matters-to-you). Essential conditions should appear in both passes. These instructions require Gemini to be enabled and cannot recover jobs removed before AI review.
 
 ## Main Run Matching Flow
 
-1. Scrape jobs from the configured sources.
+1. Scrape jobs matching the union of enabled recipients' location presets from the configured sources.
 2. Drop jobs already seen for that recipient.
 3. Apply hard filters:
-   - title seniority/commercial/eligibility terms, with recipient-aware exceptions for explicitly targeted role families such as marketing
-   - location
+   - title seniority/eligibility terms; commercial-title exclusions apply only when all target roles are recognized software, data, or AI/ML roles (including the default profiles)
+   - the recipient's `job_preferences.location` preset
    - authorization/eligibility mismatch
    - explicit experience requirement above `max_explicit_years`
 4. Score remaining jobs against semantic target-role profiles.
