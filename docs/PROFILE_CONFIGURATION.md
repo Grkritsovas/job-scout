@@ -150,3 +150,14 @@ running the app to check its company lists and filters too.
 
 For setup, advanced settings, and troubleshooting, use the
 [configuration reference](CONFIGURATION.md).
+
+## Prefer To Talk It Through?
+
+Use the [AI profile helper prompt](PROFILE_INTERVIEW_PROMPT.md) in your preferred
+AI chat. It will ask a few questions, help you put your experience and preferences
+into words, and prepare a profile for you to review.
+
+You can give it everything at once, answer one question at a time, or say
+"draft it now". You can also skip private details and add your email later.
+When you are happy with the result, enter it in the profile editor or give it
+to the person running JOB-SCOUT.
