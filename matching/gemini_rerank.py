@@ -79,6 +79,28 @@ GENERIC_MISMATCH_EXAMPLE = (
     "and still be a poor match when its seniority, core specialty, or ownership scope "
     "requires experience the candidate context does not support."
 )
+HARD_REQUIREMENT_RULE = (
+    "Penalize hard requirements more heavily than rewarding related domains. "
+    "Distinguish essential requirements from preferred skills and tools merely "
+    "mentioned in the job. Distinguish confirmed candidate gaps from unknowns: "
+    "a skill omitted from the CV summary is not proof the candidate lacks it. "
+    "Do not invent experience or count unknown skills as demonstrated strengths. "
+    "Assess transferable skills and project/academic evidence against the actual "
+    "duties and required level. Reject for a concrete core mismatch or insufficient "
+    "evidence for the role overall, not solely for an unmentioned tool. "
+    "Explicit eligibility and student-programme rules still apply."
+)
+FIT_SCORE_RULE = (
+    "fit_score must be an integer from 0 to 100 measuring application suitability, "
+    "not hiring probability or relative rank within this batch. Use the same bands "
+    "in both passes: 90-100 = excellent fit with strong direct evidence; "
+    "75-89 = strong fit with minor gaps; 60-74 = plausible application with "
+    "concrete transferable evidence and manageable gaps; 40-59 = weak fit with "
+    "substantial core gaps; 0-39 = clear mismatch. Keep only roles scoring at "
+    "least 60 that also satisfy the selection and applicable eligibility rules. "
+    "Do not inflate scores to fill a shortlist or lower them because stronger "
+    "jobs are present."
+)
 _GEMINI_CALL_LIMITER = threading.BoundedSemaphore(GEMINI_CONCURRENCY_CAP)
 PASS_ONE_JSON_SCHEMA = {
     "type": "object",
@@ -90,7 +112,7 @@ PASS_ONE_JSON_SCHEMA = {
                 "properties": {
                     "job_url": {"type": "string"},
                     "matched_profile": {"type": "string"},
-                    "fit_score": {"type": "integer"},
+                    "fit_score": {"type": "integer", "minimum": 0, "maximum": 100},
                     "why_apply": {"type": "string"},
                     "supporting_evidence": {
                         "type": "array",
@@ -142,7 +164,7 @@ PASS_TWO_JSON_SCHEMA = {
                 "type": "object",
                 "properties": {
                     "job_url": {"type": "string"},
-                    "fit_score": {"type": "integer"},
+                    "fit_score": {"type": "integer", "minimum": 0, "maximum": 100},
                     "why_apply": {"type": "string"},
                 },
                 "required": ["job_url", "fit_score", "why_apply"],
@@ -442,14 +464,19 @@ def _add_junior_targeting_rule(instructions, recipient_profile):
     if not _targets_junior_roles(recipient_profile):
         return
 
+    instructions["level_preference"] = (
+        "Prefer junior, graduate, grad, and entry-level roles. "
+        "Be cautious with manager, lead, senior, and staff roles."
+    )
     instructions["junior_targeting_rule"] = (
         "This profile targets junior or early-career roles. Treat wording like "
-        "experienced, own end-to-end, operate at scale, deep professional experience, "
-        "and required specialist tools missing from the candidate context "
-        "as significant stretch signals. Do not reject automatically: keep the role "
-        "only when the job explicitly says junior, associate, graduate, entry-level, "
-        "open to learning, or accepts academic/project experience, or when the "
-        "candidate context shows directly comparable evidence."
+        "experienced, own end-to-end, operate at scale, and deep professional "
+        "experience as stretch signals to check against the actual duties and "
+        "candidate evidence. Do not reject automatically. Positive signals include "
+        "wording that says junior, associate, graduate, entry-level, open to learning, "
+        "or accepts academic/project experience. These labels are not required if "
+        "the scope and direct or transferable candidate evidence support an "
+        "early-career application. An unmentioned tool alone is not a rejection reason."
     )
 
 
@@ -480,13 +507,8 @@ def _build_pass_one_prompt(recipient_profile, jobs, description_chars):
             "target when hireability is blocked by seniority, ownership scope, "
             "unsupported core tools, or specialist domain requirements."
         ),
-        "hard_requirement_rule": (
-            "Penalize hard requirements more heavily than rewarding related domains. "
-            "Required independent ownership, required tools absent from the "
-            "candidate context, and specialist domain experience should "
-            "usually make a role weak unless the job text explicitly accepts learning "
-            "or project/academic evidence."
-        ),
+        "hard_requirement_rule": HARD_REQUIREMENT_RULE,
+        "fit_score_rule": FIT_SCORE_RULE,
         "semantic_hint_rule": (
             "semantic_fit_hint is a rough embedding retrieval signal, not calibrated "
             "probability or evidence of realistic fit. Use it only as weak context; "
@@ -515,13 +537,14 @@ def _build_pass_one_prompt(recipient_profile, jobs, description_chars):
             "principal, director, strategist, consultant, partner, or specialist."
         ),
         "specialism_rule": (
-            "Reject roles that depend on niche domain depth, specialist tooling, or "
-            "operational ownership not supported by the target profiles and candidate "
-            "context."
+            "Assess essential niche domain depth, specialist tooling, and operational "
+            "ownership using the hard_requirement_rule. A confirmed core mismatch "
+            "outweighs broad thematic overlap; an omitted tool alone does not."
         ),
         "comparison_rule": (
             "Judge each role on its own merits. "
-            "If none are clearly good, return an empty list."
+            "If none qualify, return an empty candidates array and put every "
+            "provided job in rejected_jobs."
         ),
         "evidence_rule": (
             "supporting_evidence and mismatch_evidence must contain short exact or "
@@ -529,10 +552,6 @@ def _build_pass_one_prompt(recipient_profile, jobs, description_chars):
         ),
         "profile_rule": (
             "matched_profile must be exactly one of the provided target profile labels."
-        ),
-        "level_preference": (
-            "Prefer junior, graduate, grad, and entry-level roles. "
-            "Be cautious with manager, lead, senior, and staff roles."
         ),
         "junior_claim_rule": (
             "Do not describe a role as junior, graduate, or early-career unless the "
@@ -581,7 +600,8 @@ def _build_pass_one_prompt(recipient_profile, jobs, description_chars):
     }
     return (
         "Screen these jobs for one candidate. "
-        "Return only credible candidates as JSON matching the schema.\n\n"
+        "Return JSON matching the schema, classifying every provided job exactly "
+        "once in candidates or rejected_jobs.\n\n"
         f"{json.dumps(candidate_payload, ensure_ascii=False, indent=2)}"
     )
 
@@ -609,20 +629,17 @@ def _build_pass_two_prompt(recipient_profile, candidates, description_chars):
     ]
     instructions = {
         "task": (
-            "Compare these already-screened candidates globally and keep only the "
-            "strongest final matches."
+            "Review these already-screened candidates against the same suitability "
+            "standard as pass one. Keep every role that meets it and rank the "
+            "shortlist by fit_score."
         ),
         "fit_dimension_rule": (
             "Separate domain relevance, skill overlap, and realistic employability. "
             "Do not keep a role mainly because it matches an interesting theme if "
             "the candidate is unlikely to be interviewed or hired now."
         ),
-        "hard_requirement_rule": (
-            "Penalize hard requirements more heavily than rewarding related domains. "
-            "Required independent ownership, required tools absent from the "
-            "candidate context, and specialist domain experience should "
-            "usually make a role weaker than a less glamorous but more hireable match."
-        ),
+        "hard_requirement_rule": HARD_REQUIREMENT_RULE,
+        "fit_score_rule": FIT_SCORE_RULE,
         "semantic_hint_rule": (
             "semantic_fit_hint is a rough embedding retrieval signal, not calibrated "
             "probability or evidence of realistic fit. Use it only as weak context; "
@@ -633,8 +650,9 @@ def _build_pass_two_prompt(recipient_profile, candidates, description_chars):
             "Drop roles that only look relevant because of tool overlap."
         ),
         "selection_rule": (
-            "Keep roles that remain plausibly relevant with concrete evidence "
-            "after comparison. Drop obvious mismatches and roles where the match "
+            "Keep every role that remains plausibly relevant with concrete evidence. "
+            "Reject only for a concrete suitability issue in that role. "
+            "Drop obvious mismatches and roles where the match "
             "relies mainly on stretched tool overlap, seniority, or unsupported "
             "domain depth."
         ),
@@ -643,13 +661,17 @@ def _build_pass_two_prompt(recipient_profile, candidates, description_chars):
             "ownership, or seniority the candidate does not clearly have."
         ),
         "specialism_rule": (
-            "Drop roles that depend on niche domain depth, specialist tooling, or "
-            "operational ownership not supported by the target profiles and candidate "
-            "context."
+            "Assess essential niche domain depth, specialist tooling, and operational "
+            "ownership using the hard_requirement_rule. A confirmed core mismatch "
+            "outweighs broad thematic overlap; an omitted tool alone does not."
         ),
         "comparison_rule": (
             "Use the candidate profiles as the main rule. "
-            "Jobs with weak evidence, notable mismatches, or stretched reasoning should be dropped."
+            "Use comparison to order suitable roles, not to impose a shortlist quota. "
+            "Do not reject a suitable role solely because stronger roles exist. "
+            "Reassess batch_fit_score and prior explanations against the job text "
+            "using the shared scoring bands. If none qualify, return an empty "
+            "shortlisted_jobs array and put every screened candidate in rejected_jobs."
         ),
         "junior_claim_rule": (
             "Do not describe a role as junior, graduate, or early-career unless the "
@@ -700,7 +722,8 @@ def _build_pass_two_prompt(recipient_profile, candidates, description_chars):
     return (
         "Finalize the shortlist for one candidate. "
         "These jobs already passed a first screening round. "
-        "Now compare them against each other and keep only the genuinely strong matches.\n\n"
+        "Keep every suitable role and order the shortlist by fit_score; account for "
+        "every screened candidate in shortlisted_jobs or rejected_jobs.\n\n"
         f"{json.dumps(payload, ensure_ascii=False, indent=2)}"
     )
 
