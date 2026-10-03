@@ -50,13 +50,24 @@ Follow the conversation, not a fixed checklist. You need enough to describe:
 1. The work I would apply for, and the level of responsibility I want.
 2. The country I want to work from, and whether remote, hybrid, or office work
    matters to me. Do not assume "remote" means I can work from any country.
+   If office attendance matters, learn which cities or areas I can attend,
+   any commuting limits, and whether I would relocate. Ask only for missing
+   details that would change the search; an exact address is unnecessary.
 3. A little about what I have done: relevant tasks, skills, tools, or projects.
+   If this is too generic to judge fit, ask for one or two relevant examples:
+   what I did or built, which tools I used, and whether I worked independently
+   or with support. Use examples already in my answers or CV; do not require
+   achievements or metrics I cannot provide. Keep employment, coursework,
+   volunteering, and personal projects distinct.
 4. The languages I can use at work, and the language I want job explanations in.
 5. Any real deal-breakers and a few preferences, such as shifts, sales duties,
    travel, contract type, training, or pay.
 
 Ask about education or permission to work only when relevant; a short factual
-answer is enough. Never request passwords, API keys, database credentials,
+answer is enough. If I need sponsorship, clarify whether I need it now or later
+when that matters, and whether I would consider ads that do not mention it.
+Do not assume that silence means sponsorship is available or unavailable.
+Never request passwords, API keys, database credentials,
 identity documents, or an exact home address. Email is optional in this chat:
 I can replace a placeholder privately later.
 
@@ -101,6 +112,9 @@ Do not include comments, trailing commas, ellipses, or extra keys in the JSON.
   inherit an example person's experience. Include at least one chosen role.
 - Write candidate.summary as a short factual introduction. Repeat the relevant
   strengths in each role's match_text; repeating a useful sentence is fine.
+  Include concise examples and the level of responsibility where supplied,
+  rather than only listing tools or generic strengths. Keep demonstrated
+  abilities separate from tasks or tools I want to learn.
 - Record work languages in that introduction. Put language requirements for
   jobs in the review instructions. delivery.language controls only the AI's
   job explanations, not which languages I can work in or the whole email.
@@ -108,6 +122,11 @@ Do not include comments, trailing commas, ellipses, or extra keys in the JSON.
   exclusions. Use extra_final_ranking_guidance for my priorities among suitable
   jobs. Repeat essential requirements, such as remote-only work from Greece,
   in both lists. These lists can be empty; do not manufacture restrictions.
+- Keep job_preferences.location as the supported country. Put stated city or
+  area restrictions, office-attendance limits, and relocation conditions in
+  both review lists when essential. Preserve softer location preferences as
+  preferences. Do not invent city, commute, or relocation JSON fields, infer
+  travel times from a city name, or claim commuting distance was verified.
 - Preserve uncertainty rather than automatically rejecting every unclear ad.
   If I want strict evidence for a requirement, say so in the instructions.
 - If I have no experience, describe that honestly along with my stated interests
@@ -116,6 +135,12 @@ Do not include comments, trailing commas, ellipses, or extra keys in the JSON.
   list when there is no extra guidance. Note meaningful gaps outside the JSON.
 - For a new profile, keep the technical defaults below unless a preference
   actually calls for a change. Do not interview me about tuning parameters.
+- For a new profile, use boost_multiplier: 1.2 with the template's junior title
+  terms only when junior, graduate, or entry-level roles are preferred. Otherwise
+  use boost_multiplier: 1.0 to disable the title boost; the terms can stay in
+  place because they have no effect at 1.0. When editing, adjust an existing
+  junior boost if my stated target level no longer calls for it. Do not infer
+  a junior preference solely from my years of experience.
 - max_explicit_years is the largest advertised experience requirement I want
   to consider, not necessarily my exact years of experience. If it is unclear,
   propose a value consistent with the level discussed and mention it in the
@@ -125,9 +150,15 @@ Do not include comments, trailing commas, ellipses, or extra keys in the JSON.
   range. Put ordinary pay expectations in review guidance with the stated
   currency, time period, and gross/net basis if known. Never put a euro or
   monthly minimum into a GBP ceiling, or invent a currency conversion.
-- Record sponsorship needs only if stated. Leave the sponsor lookup and
-  stricter eligibility switches at their defaults for a new profile unless
-  their use is established. False switches do not prove permission to work.
+- Record sponsorship needs only if stated. If I need sponsorship, set
+  needs_sponsorship: true, record the stated circumstances and timing in
+  work_authorization_summary, and include the requirement in both review
+  lists. Include my policy on ads with unstated sponsorship: require explicit
+  evidence only if I asked for it; otherwise preserve that uncertainty without
+  claiming sponsorship is confirmed. Do not invent visa dates or status.
+  Leave the sponsor lookup and stricter eligibility switches at their defaults
+  for a new profile unless their use is established. False switches do not
+  prove permission to work.
 - If I do not share an email, use recipient@example.com and enabled: false.
   Say that I must replace the email before enabling delivery. Never invent a
   real address. For a new profile with a real email, enable it only if I have
@@ -144,6 +175,9 @@ request, and do not promise that a prompt can fix an unsupported feature.
   without an explicit Greek location; do not promise complete remote coverage.
 - Review instructions need AI review enabled and are not guaranteed hard
   filters. They cannot rescue jobs removed earlier in the search.
+- needs_sponsorship controls sponsorship information in the digest; the flag
+  alone does not enforce sponsorship suitability in matching. Capture the
+  actual need in the candidate context and review guidance as described above.
 - Some senior-title and student-only jobs are still excluded by fixed filters.
   If that is central to my search, flag it as needing an app change rather than
   pretending the profile can override it.
