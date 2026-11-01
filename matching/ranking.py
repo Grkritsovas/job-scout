@@ -3,6 +3,7 @@ import re
 import threading
 from collections import Counter
 
+from matching.cv import chunk_cv_text
 from matching.hard_filters import (
     DEFAULT_MAX_YEARS_EXPERIENCE,
     get_hard_filter_reason,
@@ -28,6 +29,9 @@ DEFAULT_JUNIOR_BOOST_TERMS = (
     "entry-level",
 )
 HARD_FILTER_AUDIT_LIMIT_PER_REASON = 30
+CV_EVIDENCE_WEIGHT = 0.2
+CV_RELEVANCE_THRESHOLD = 0.25
+CV_PASSAGES_PER_PROFILE = 3
 
 SALARY_RANGE_PATTERNS = [
     re.compile(
@@ -62,6 +66,7 @@ class ProfileMatcher:
         self.util = util
         self.description_embedding_cache = {}
         self.profile_embedding_cache = {}
+        self.cv_profile_embedding_cache = {}
         self.cache_lock = threading.Lock()
 
     def _get_description_embedding(self, description):
@@ -97,6 +102,49 @@ class ProfileMatcher:
                 computed_embeddings,
             )
 
+    def _get_cv_profile_embeddings(self, profile_specs, profile_embeddings):
+        cache_key = tuple(
+            (spec["id"], spec["text"], spec.get("cv", ""))
+            for spec in profile_specs
+        )
+        with self.cache_lock:
+            cached_embeddings = self.cv_profile_embedding_cache.get(cache_key)
+        if cached_embeddings is not None:
+            return cached_embeddings
+
+        # Select evidence once per profile/CV, rather than letting each job cherry
+        # pick an incidental match from the candidate's entire work history.
+        cv_embeddings = {}
+        selected_embeddings = []
+        for index, spec in enumerate(profile_specs):
+            cv = spec.get("cv", "")
+            if not cv:
+                selected_embeddings.append(None)
+                continue
+            if cv not in cv_embeddings:
+                cv_embeddings[cv] = self.model.encode(
+                    chunk_cv_text(cv), normalize_embeddings=True
+                )
+            embeddings = cv_embeddings[cv]
+            relevance = self.util.cos_sim(
+                profile_embeddings[index], embeddings
+            )[0].tolist()
+            relevant_indices = [
+                passage_index
+                for passage_index in sorted(
+                    range(len(relevance)), key=relevance.__getitem__, reverse=True
+                )[:CV_PASSAGES_PER_PROFILE]
+                if relevance[passage_index] >= CV_RELEVANCE_THRESHOLD
+            ]
+            selected_embeddings.append(
+                embeddings[relevant_indices] if relevant_indices else None
+            )
+
+        with self.cache_lock:
+            return self.cv_profile_embedding_cache.setdefault(
+                cache_key, selected_embeddings
+            )
+
     def score_description(self, description, profile_specs):
         description_embedding = self._get_description_embedding(description)
         profile_embeddings = self._get_profile_embeddings(profile_specs)
@@ -104,6 +152,25 @@ class ProfileMatcher:
             description_embedding,
             profile_embeddings,
         )[0].tolist()
+        if any(spec.get("cv") for spec in profile_specs):
+            cv_profile_embeddings = self._get_cv_profile_embeddings(
+                profile_specs, profile_embeddings
+            )
+            for index, embeddings in enumerate(cv_profile_embeddings):
+                if embeddings is None:
+                    continue
+                evidence_scores = self.util.cos_sim(
+                    description_embedding, embeddings
+                )[0].tolist()
+                evidence_score = sum(evidence_scores) / len(evidence_scores)
+                role_score = similarities[index]
+                # Keep the original role score as a floor. CV evidence may help
+                # retrieval without narrowing career moves to past experience.
+                similarities[index] = max(
+                    role_score,
+                    (1 - CV_EVIDENCE_WEIGHT) * role_score
+                    + CV_EVIDENCE_WEIGHT * evidence_score,
+                )
 
         profile_scores = {
             spec["label"]: score

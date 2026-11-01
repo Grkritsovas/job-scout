@@ -522,6 +522,62 @@ class Storage:
             )
         self.store_job_state_rows(recipient_id, None, state_rows)
 
+    def unmark_seen_job(self, recipient_id, job_url):
+        """Allow a full re-evaluation on rediscovery, preserving review history."""
+        if not recipient_id or not job_url:
+            return 0
+
+        placeholder = "?" if self.backend == "sqlite" else "%s"
+        seen_false = "0" if self.backend == "sqlite" else "FALSE"
+        connection = (
+            self._connect_sqlite()
+            if self.backend == "sqlite"
+            else self._connect_postgres()
+        )
+        try:
+            cursor = connection.cursor()
+            cursor.execute(
+                f"""
+                UPDATE {self._seen_jobs_table_name()}
+                SET is_seen = {seen_false},
+                    processing_status = 'awaiting_main_run',
+                    review_family = 'manual',
+                    classification = 'manual_reset_unseen',
+                    stage = 'manual_reset',
+                    run_id = NULL,
+                    semantic_rank = NULL,
+                    raw_embedding_score = NULL,
+                    semantic_score = NULL,
+                    semantic_threshold = NULL,
+                    semantic_fit_hint = NULL,
+                    review_error_stage = NULL,
+                    updated_at = CURRENT_TIMESTAMP
+                WHERE recipient_id = {placeholder}
+                  AND job_url = {placeholder}
+                  AND is_seen = {self._true_literal()}
+                """,
+                (recipient_id, job_url),
+            )
+            updated_count = cursor.rowcount
+            if updated_count:
+                # A queued approval belongs to the old review. Remove it in the
+                # same transaction so it cannot send before the fresh decision.
+                cursor.execute(
+                    f"""
+                    DELETE FROM {self._digest_queue_table_name()}
+                    WHERE recipient_id = {placeholder}
+                      AND job_url = {placeholder}
+                    """,
+                    (recipient_id, job_url),
+                )
+            connection.commit()
+            return updated_count
+        except Exception:
+            connection.rollback()
+            raise
+        finally:
+            connection.close()
+
     def store_job_state_rows(self, recipient_id, run_id, state_rows):
         rows = [
             self._normalize_job_state_row(recipient_id, run_id, row)

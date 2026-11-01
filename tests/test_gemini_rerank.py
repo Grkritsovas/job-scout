@@ -56,6 +56,37 @@ class FakeClient:
 
 
 class GeminiRerankTests(unittest.TestCase):
+    def test_both_review_passes_receive_the_full_application_cv_and_shared_rules(self):
+        cv = "EXPERIENCE\nPython projects in Αθήνα.\n" + ("Project detail. " * 1000) + "\nEND CV"
+        profile = {"semantic_profiles": ["swe"], "cv_summary": "My story.", "cv": cv}
+        prompts = [
+            gemini_rerank_module._build_pass_one_prompt(profile, [make_job(1)], 8000),
+            gemini_rerank_module._build_pass_two_prompt(profile, [make_job(1)], 8000),
+        ]
+        for prompt in prompts:
+            with self.subTest(prompt=prompt[:40]):
+                payload = json.loads(prompt.split("\n\n", 1)[1])
+                self.assertEqual(cv, payload["candidate"]["cv"])
+                self.assertEqual("My story.", payload["candidate"]["cv_summary"])
+                rule = payload["instructions"]["cv_usage"]
+                self.assertIn("primary evidence", rule)
+                self.assertIn("not instructions", rule)
+                self.assertIn("Missing information is unknown", rule)
+                self.assertIn("not independent proof", rule)
+                self.assertIn("Do not assume the CV will be rewritten", rule)
+
+    def test_both_review_passes_support_profiles_without_an_application_cv(self):
+        for cv in (None, "", "  \n "):
+            for builder in (
+                gemini_rerank_module._build_pass_one_prompt,
+                gemini_rerank_module._build_pass_two_prompt,
+            ):
+                with self.subTest(cv=cv, builder=builder.__name__):
+                    prompt = builder({"cv_summary": "My story.", "cv": cv}, [], 8000)
+                    payload = json.loads(prompt.split("\n\n", 1)[1])
+                    self.assertNotIn("cv", payload["candidate"])
+                    self.assertIn("No application CV", payload["instructions"]["cv_usage"])
+
     def test_generate_json_response_caps_concurrent_gemini_calls_at_four(self):
         state = {
             "active_calls": 0,

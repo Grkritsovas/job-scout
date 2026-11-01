@@ -95,7 +95,13 @@ SQLite is only used when you explicitly request it, for example:
 python admin_ui.py --database-url "sqlite:///job_scraper.db"
 ```
 
-The UI can edit database-backed recipient profiles through locked schema fields, preview the generated JSON, validate/normalize it through the runtime profile loader, compare/restore saved profile versions, and browse recent `app_config.recipient_review_audit` rows. It does not edit GitHub secrets, local recipient JSON files, or job state records.
+The UI can edit database-backed recipient profiles through locked schema fields, preview the generated JSON, validate/normalize it through the runtime profile loader, compare/restore saved profile versions, and browse recent `app_config.recipient_review_audit` rows. It also supports explicitly unmarking an individual seen job for a recipient. It does not edit GitHub secrets or local recipient JSON files.
+
+Under Candidate, `candidate.cv` is an optional text box for the full application
+CV extracted from a PDF. It is saved in the existing profile JSON; no database
+migration or new secret is required. Both Gemini passes read the complete text,
+and semantic matching uses role-relevant passages. Existing profiles without
+this field continue to work. See [adding your CV](PROFILE_CONFIGURATION.md#tell-us-about-yourself).
 
 ## Review Audit
 
@@ -117,7 +123,21 @@ The scraper stores per-recipient job processing state in:
 - `app_config.recipient_seen_jobs` on Postgres/Supabase
 - `recipient_seen_jobs` on local SQLite
 
-Rows with `is_seen=true` are skipped in future runs. Rows with `is_seen=false` are pending backlog rows that can be picked up by support runs. Support runs check recent pending rows before installing full scraper dependencies.
+Rows with `is_seen=true` are skipped in future runs. Ordinary rows with `is_seen=false` are pending backlog rows that can be picked up by support runs. Explicitly unmarked rows instead wait for the next full scrape. Support runs check recent pending rows before installing full scraper dependencies.
+
+To reconsider individual jobs after changing a profile or CV, restart the admin
+UI, refresh the browser, and open **Review Audit**. Filter by recipient and find
+the job, then click **Unmark** on a row recorded as seen. This clears only that
+recipient's seen flag and any queued approval for that job. Previous audit rows
+and the history of whether it was emailed are preserved. A repeated click is a
+no-op if the marker is already clear.
+
+The next main run reassesses the job through hard filters, semantic matching,
+and optional Gemini review if it is rediscovered in the scrape. Unmarking does
+not fetch or review the job immediately and does not guarantee it still exists
+or will pass matching. Previously emailed jobs can be emailed again if approved.
+The `manual_reset_unseen` classification waits for main-run rediscovery rather
+than triggering support runs, which bypass semantic matching.
 
 Support runs are backlog-only. They do not scrape the configured source families,
 do not apply hard filters, and do not run semantic ranking. They load pending

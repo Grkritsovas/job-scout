@@ -152,4 +152,8 @@ def build_profile_specs(recipient_profile):
             }
         )
 
+    cv = str(recipient_profile.get("cv") or "").strip()
+    if cv:
+        for spec in specs:
+            spec["cv"] = cv
     return specs

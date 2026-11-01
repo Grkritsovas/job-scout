@@ -166,9 +166,13 @@ def normalize_grouped_profile(profile, index=0, sender_email=""):
     _reject_unknown_keys(delivery_config, {"email", "language"}, "delivery")
     _reject_unknown_keys(
         candidate_config,
-        {"summary", "education_status", "target_roles"},
+        {"summary", "cv", "education_status", "target_roles"},
         "candidate",
     )
+    if candidate_config.get("cv") is not None and not isinstance(
+        candidate_config["cv"], str
+    ):
+        raise RuntimeError("candidate.cv must be plain text.")
     _reject_unknown_keys(
         preferences_config,
         {"location", "target_seniority", "salary"},
@@ -213,6 +217,7 @@ def normalize_grouped_profile(profile, index=0, sender_email=""):
         },
         "candidate": {
             "summary": _normalize_text(candidate_config.get("summary")),
+            "cv": _normalize_text(candidate_config.get("cv")),
             "education_status": _normalize_text(
                 candidate_config.get("education_status")
             ),
@@ -340,6 +345,7 @@ def _to_runtime_profile(grouped_profile):
         "semantic_profiles": semantic_profiles,
         "semantic_profile_texts": semantic_profile_texts,
         "cv_summary": _normalize_text(grouped_profile["candidate"].get("summary")),
+        "cv": _normalize_text(grouped_profile["candidate"].get("cv")),
         "education_status": _normalize_text(
             grouped_profile["candidate"].get("education_status")
         ),

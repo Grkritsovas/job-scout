@@ -4,6 +4,7 @@ from pathlib import Path
 from unittest.mock import patch
 
 from config.recipient_profiles import (
+    _to_runtime_profile,
     load_recipient_profiles,
     normalize_grouped_profile,
     prepare_recipient_profile_db_rows,
@@ -12,6 +13,35 @@ from storage import create_storage
 
 
 class RecipientProfilesTests(unittest.TestCase):
+    def test_cv_survives_normalization_and_runtime_conversion(self):
+        cv = "EXPERIENCE\nBuilt Python APIs.\nEDUCATION\nMSc, Athens."
+        grouped = normalize_grouped_profile({
+            "id": "cv-recipient",
+            "delivery": {"email": "cv@example.com"},
+            "candidate": {"summary": "My story.", "cv": f"  {cv}\n"},
+        })
+        row = prepare_recipient_profile_db_rows([grouped])[0]
+        runtime = _to_runtime_profile(row["config"])
+        self.assertEqual(cv, row["config"]["candidate"]["cv"])
+        self.assertEqual(cv, runtime["cv"])
+        self.assertEqual("My story.", runtime["cv_summary"])
+
+    def test_cv_is_optional_but_must_be_text_when_provided(self):
+        for cv in (None, "", "  \n "):
+            with self.subTest(cv=cv):
+                grouped = normalize_grouped_profile({
+                    "delivery": {"email": "cv@example.com"},
+                    "candidate": {"cv": cv},
+                })
+                self.assertEqual("", _to_runtime_profile(grouped)["cv"])
+        grouped = normalize_grouped_profile({"delivery": {"email": "cv@example.com"}})
+        self.assertEqual("", _to_runtime_profile(grouped)["cv"])
+        with self.assertRaisesRegex(RuntimeError, "candidate.cv must be plain text"):
+            normalize_grouped_profile({
+                "delivery": {"email": "cv@example.com"},
+                "candidate": {"cv": {"file": "cv.pdf"}},
+            })
+
     def setUp(self):
         self.test_dir = Path("tests/.tmp_recipient_profiles")
         self.test_dir.mkdir(parents=True, exist_ok=True)

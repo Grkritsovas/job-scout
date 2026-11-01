@@ -254,6 +254,7 @@ function renderProfileForm(profile) {
     ].join(""))}
     ${profileSection("Candidate", "candidate", [
       textareaField("candidate.summary", "candidate_summary", normalized.candidate.summary, 5),
+      textareaField("candidate.cv", "candidate_cv", normalized.candidate.cv, 14),
       textField("candidate.education_status", "candidate_education_status", normalized.candidate.education_status),
       rolesField(normalized.candidate.target_roles),
     ].join(""))}
@@ -365,6 +366,7 @@ function readProfileEditor() {
     },
     candidate: {
       summary: fieldValue("candidate_summary"),
+      cv: fieldValue("candidate_cv"),
       education_status: fieldValue("candidate_education_status"),
       target_roles: readRoles(),
     },
@@ -474,6 +476,7 @@ function normalizeProfileForForm(profile) {
     },
     candidate: {
       summary: candidate.summary || "",
+      cv: candidate.cv || "",
       education_status: candidate.education_status || "",
       target_roles: roles.map((role) => ({
         id: role.id || role.profile_id || role.name || "",
@@ -520,6 +523,7 @@ function defaultProfile() {
     },
     candidate: {
       summary: "",
+      cv: "",
       education_status: "",
       target_roles: [
         {
@@ -679,8 +683,51 @@ function renderAuditRows(rows) {
         ${evidenceBlock("Mismatch", row.mismatch_evidence)}
       </div>
     `;
+    if (row.seen_recorded && row.recipient_id && row.job_url) {
+      const controls = document.createElement("div");
+      controls.className = "audit-reset";
+      const button = document.createElement("button");
+      button.type = "button";
+      button.textContent = "Unmark";
+      button.title = "Reassess this job for this recipient on the next full run";
+      button.dataset.action = "unmark-job";
+      button.dataset.recipientId = row.recipient_id;
+      button.dataset.jobUrl = row.job_url;
+      const status = document.createElement("div");
+      status.className = "status-line";
+      status.setAttribute("role", "status");
+      button.addEventListener("click", () => unmarkAuditJob(row, button, status));
+      controls.appendChild(button);
+      controls.appendChild(status);
+      item.querySelector(".audit-meta").appendChild(controls);
+    }
     els.auditRows.appendChild(item);
   });
+}
+
+async function unmarkAuditJob(row, button, status) {
+  button.disabled = true;
+  status.textContent = "Unmarking...";
+  status.className = "status-line";
+  try {
+    const result = await apiPost("/api/jobs/unmark", {
+      recipient_id: row.recipient_id,
+      job_url: row.job_url,
+    });
+    status.textContent = result.message;
+    status.className = "status-line ok";
+    // One job may appear in several audit rows for this recipient.
+    els.auditRows.querySelectorAll('[data-action="unmark-job"]').forEach((other) => {
+      if (other.dataset.recipientId === row.recipient_id && other.dataset.jobUrl === row.job_url) {
+        other.disabled = true;
+        other.textContent = "Unmarked";
+      }
+    });
+  } catch (error) {
+    status.textContent = error.message;
+    status.className = "status-line error";
+    button.disabled = false;
+  }
 }
 
 function scoreLine(row) {

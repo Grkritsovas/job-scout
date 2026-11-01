@@ -16,6 +16,97 @@ class StorageTests(unittest.TestCase):
             child.unlink()
         self.test_dir.rmdir()
 
+    def test_unmark_is_scoped_preserves_history_and_waits_for_full_matching(self):
+        storage = create_storage(f"sqlite:///{(self.test_dir / 'unmark.db').resolve()}")
+        storage.ensure_schema()
+        job = {"url": "https://example.com/retry", "source": "ashby", "sent": True}
+        other_job = {"url": "https://example.com/keep"}
+        storage.store_seen_jobs("recipient-a", [job, other_job])
+        storage.store_seen_jobs("recipient-b", [job])
+        storage.store_review_audit_rows("recipient-a", "old-run", [{
+            "job_url": job["url"], "review_family": "gemini",
+            "classification": "gemini_pass1_rejected_seen", "seen_recorded": True,
+        }])
+        old_audit = storage.load_review_audit_rows()
+
+        self.assertEqual(1, storage.unmark_seen_job("recipient-a", job["url"]))
+        self.assertEqual({other_job["url"]}, storage.load_seen_urls("recipient-a"))
+        self.assertEqual({job["url"]}, storage.load_seen_urls("recipient-b"))
+        self.assertEqual(old_audit, storage.load_review_audit_rows())
+        self.assertEqual([], storage.load_pending_job_backlog("recipient-a"))
+        self.assertEqual(0, storage.count_recent_pending_job_backlog())
+        row = storage._fetch_all(
+            "SELECT * FROM recipient_seen_jobs WHERE recipient_id = ? AND job_url = ?",
+            ("recipient-a", job["url"]),
+        )[0]
+        self.assertEqual("awaiting_main_run", row["processing_status"])
+        self.assertEqual("manual_reset_unseen", row["classification"])
+        self.assertTrue(row["sent"])
+        self.assertEqual(0, storage.unmark_seen_job("recipient-a", job["url"]))
+        # A new decision can mark the job seen again through the normal path.
+        storage.store_seen_jobs("recipient-a", [job])
+        self.assertIn(job["url"], storage.load_seen_urls("recipient-a"))
+
+    def test_unmark_removes_only_the_matching_queued_approval_and_old_scores(self):
+        storage = create_storage(f"sqlite:///{(self.test_dir / 'unmark_queue.db').resolve()}")
+        storage.ensure_schema()
+        job = {"url": "https://example.com/queued", "why_apply": "Old approval."}
+        other_job = {"url": "https://example.com/keep-queued"}
+        storage.store_job_state_rows("recipient-a", "old-run", [{
+            "job_url": job["url"], "is_seen": True,
+            "classification": "gemini_pass2_approved_queued_seen",
+            "semantic_rank": 1, "raw_embedding_score": 0.5,
+            "semantic_score": 0.6, "semantic_threshold": 0.42,
+            "semantic_fit_hint": "Old fit",
+        }])
+        storage.store_digest_queue_jobs("recipient-a", "old-run", [job, other_job])
+        storage.store_digest_queue_jobs("recipient-b", "old-run", [job])
+
+        self.assertEqual(1, storage.unmark_seen_job("recipient-a", job["url"]))
+        self.assertEqual([other_job], storage.load_digest_queue_jobs("recipient-a"))
+        self.assertEqual([job], storage.load_digest_queue_jobs("recipient-b"))
+        row = storage._fetch_all("SELECT * FROM recipient_seen_jobs", ())[0]
+        for field in ("run_id", "semantic_rank", "raw_embedding_score", "semantic_score",
+                      "semantic_threshold", "semantic_fit_hint"):
+            self.assertIsNone(row[field], field)
+
+    def test_unmark_ignores_unknown_jobs_and_existing_pending_backlog(self):
+        storage = create_storage(f"sqlite:///{(self.test_dir / 'unmark_pending.db').resolve()}")
+        storage.ensure_schema()
+        storage.store_job_state_rows("recipient-a", "run", [{
+            "job_url": "https://example.com/pending", "is_seen": False,
+            "classification": "gemini_batch_failed_not_seen",
+        }])
+        before = storage.load_pending_job_backlog("recipient-a")
+        for recipient, url in (
+            ("recipient-a", "https://example.com/pending"),
+            ("recipient-a", "https://example.com/unknown"),
+            ("recipient-b", "https://example.com/pending"),
+            ("", "https://example.com/pending"),
+        ):
+            self.assertEqual(0, storage.unmark_seen_job(recipient, url))
+        self.assertEqual(before, storage.load_pending_job_backlog("recipient-a"))
+
+    def test_unmark_rolls_back_if_the_queued_approval_cannot_be_removed(self):
+        storage = create_storage(f"sqlite:///{(self.test_dir / 'unmark_rollback.db').resolve()}")
+        storage.ensure_schema()
+        job = {"url": "https://example.com/queued"}
+        storage.store_seen_jobs("recipient-a", [job])
+        storage.store_digest_queue_jobs("recipient-a", "run", [job])
+        connection = storage._connect_sqlite()
+        try:
+            connection.execute("""
+                CREATE TRIGGER prevent_queue_delete BEFORE DELETE ON recipient_digest_queue
+                BEGIN SELECT RAISE(ABORT, 'queue locked'); END
+            """)
+            connection.commit()
+        finally:
+            connection.close()
+        with self.assertRaisesRegex(sqlite3.IntegrityError, "queue locked"):
+            storage.unmark_seen_job("recipient-a", job["url"])
+        self.assertIn(job["url"], storage.load_seen_urls("recipient-a"))
+        self.assertEqual([job], storage.load_digest_queue_jobs("recipient-a"))
+
     def test_recipient_seen_jobs_are_recipient_aware(self):
         db_path = (self.test_dir / "test.db").resolve()
         storage = create_storage(f"sqlite:///{db_path}")

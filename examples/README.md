@@ -27,6 +27,7 @@ Top-level fields:
 - `delivery.email`
 - `delivery.language`
 - `candidate.summary`
+- `candidate.cv`
 - `candidate.education_status`
 - `candidate.target_roles`
 - `job_preferences.location`
@@ -38,6 +39,7 @@ Top-level fields:
 
 Useful notes:
 - `candidate.target_roles[*].match_text` is the strongest personalization lever for semantic ranking.
+- `candidate.cv` optionally holds the full application CV as plain text, with `\n` for line breaks in JSON. Paste it directly into the admin editor's CV box; no separate file or GitHub secret is needed. Both Gemini passes receive it, and semantic matching uses relevant passages as supporting evidence.
 - `delivery.language` optionally tells Gemini what language to use for user-facing `why_apply` digest text.
 - `candidate.summary`, `candidate.education_status`, and `eligibility.work_authorization_summary` are sent to Gemini as candidate context.
 - `job_preferences.location` accepts `UK` or `Greece` and defaults to `UK` when omitted.

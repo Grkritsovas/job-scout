@@ -71,6 +71,39 @@ For example:
 For each role's **match_text**, include the skills from your introduction that
 are relevant to that role. It is fine to reuse a sentence.
 
+In **candidate.cv**, paste the full plain text of the CV you will actually use
+to apply. Copy or extract it from your PDF first, checking that sections and
+dates are readable. The editor accepts text, not PDF uploads. This is optional:
+leave it empty if you have not added a CV yet.
+
+Keep your introduction in **candidate.summary** and your application CV in
+**candidate.cv**. Both AI review passes read the full CV as the primary evidence
+your application demonstrates. Semantic matching uses short, role-relevant CV
+passages as supporting evidence to help retrieve jobs; your selected target
+roles still define the work you want.
+
+Save the profile in the editor to update the database. Restart the admin UI and
+refresh the browser after updating the app to see the new CV box. In JSON, the
+new field belongs inside `candidate`, alongside `summary`:
+
+```json
+{
+  "candidate": {
+    "summary": "My background and what I want to do next.",
+    "cv": "EXPERIENCE\nFull application CV text here.\nEDUCATION\nQualifications here.",
+    "target_roles": [{"id": "swe"}]
+  }
+}
+```
+
+An updated CV affects future matching. It does not automatically reconsider jobs
+already marked seen. To reconsider individual jobs, open **Review Audit**, filter
+by your recipient, and click **Unmark** on the jobs you want checked again. They
+will be reassessed if rediscovered in the next full scrape; previous review
+history is kept. Previously emailed jobs may be emailed again if approved.
+Compare representative jobs when tuning the semantic
+threshold: CV evidence can change scores and the order of the top-N shortlist.
+
 In **candidate.education_status**, briefly say whether you are studying or have
 finished, for example "Graduated in June 2026".
 

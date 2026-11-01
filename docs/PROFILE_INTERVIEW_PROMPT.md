@@ -115,6 +115,10 @@ Do not include comments, trailing commas, ellipses, or extra keys in the JSON.
   Include concise examples and the level of responsibility where supplied,
   rather than only listing tools or generic strengths. Keep demonstrated
   abilities separate from tasks or tools I want to learn.
+- Put the full plain text of my actual application CV in candidate.cv only if
+  I have supplied it. Preserve its factual content and readable sections; do not
+  invent or rewrite it from my story. Leave it empty otherwise. The app uses it
+  in both AI review passes and selects relevant passages for semantic matching.
 - Record work languages in that introduction. Put language requirements for
   jobs in the review instructions. delivery.language controls only the AI's
   job explanations, not which languages I can work in or the whole email.
@@ -198,6 +202,7 @@ JSON TEMPLATE
   },
   "candidate": {
     "summary": "",
+    "cv": "",
     "education_status": "",
     "target_roles": [
       {

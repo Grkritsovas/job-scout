@@ -497,6 +497,17 @@ input {
   gap: 10px;
 }
 
+.audit-help {
+  color: var(--muted);
+  font-size: 13px;
+  line-height: 1.5;
+  margin-bottom: 12px;
+}
+
+.audit-reset {
+  margin-top: 10px;
+}
+
 .audit-row {
   display: grid;
   grid-template-columns: minmax(180px, 1.1fr) minmax(220px, 1.6fr) minmax(180px, 1fr);

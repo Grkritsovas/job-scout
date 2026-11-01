@@ -123,6 +123,26 @@ class AdminController:
             },
         }
 
+    def unmark_job(self, payload):
+        if not isinstance(payload, dict):
+            raise AdminApiError("A recipient_id and job_url are required.")
+        for field in ("recipient_id", "job_url"):
+            if not isinstance(payload.get(field), str) or not payload[field].strip():
+                raise AdminApiError(f"{field} is required and must be text.")
+        recipient_id = payload["recipient_id"].strip()
+        job_url = payload["job_url"].strip()
+        updated_count = self.storage.unmark_seen_job(recipient_id, job_url)
+        return {
+            "unmarked": bool(updated_count),
+            "recipient_id": recipient_id,
+            "job_url": job_url,
+            "message": (
+                "Unmarked. This job will be reassessed if it appears in the next full scrape."
+                if updated_count
+                else "This job is already unmarked or has no saved seen marker."
+            ),
+        }
+
     def audit_filter_values(self):
         values = self.storage.load_review_audit_filter_values()
         profile_ids = [
@@ -341,6 +361,9 @@ def make_handler(controller):
 
         def _handle_post(self, parsed):
             payload = self._read_json()
+            if parsed.path == "/api/jobs/unmark":
+                self._send_json(controller.unmark_job(payload))
+                return
             if parsed.path == "/api/profiles/validate":
                 self._send_json(controller.validate_profile(payload.get("profile")))
                 return

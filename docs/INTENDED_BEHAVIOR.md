@@ -22,8 +22,9 @@ The source of truth for this workflow state is `recipient_seen_jobs`
 table name, it now stores per-recipient job processing state:
 
 - `is_seen=true` means the recipient/job pair should be skipped in future runs.
-- `is_seen=false` means the recipient/job pair is pending review and can trigger
-  a support run.
+- `is_seen=false` means the recipient/job pair can be reconsidered. Normal
+  backlog classifications can trigger a support run; `manual_reset_unseen`
+  instead waits for rediscovery in a main run.
 - `classification`, `review_family`, `stage`, `run_id`, and score columns explain
   why the row is processed or pending.
 
@@ -86,6 +87,16 @@ possible. It trims common low-signal sections such as benefits, culture,
 diversity statements, legal footers, and application-process boilerplate before
 embedding the job text.
 
+An optional `candidate.cv` contains the plain text of the application CV. The
+semantic matcher splits it into overlapping 80-word passages, then selects up
+to three passages per target profile with role similarity of at least 0.25.
+These selections are cached for the current role text and CV. It compares the
+job against those passages and takes the greater of the original role score
+and an 80% role / 20% mean CV-evidence score. Unrelated or missing CV evidence
+leaves the original score unchanged. Existing thresholds, title boosts, salary
+penalties, hard filters, and top-N limits still apply; CV evidence can change
+which jobs reach review through those thresholds and limits.
+
 The audit stores both:
 
 - `raw_embedding_score`: the embedding similarity before title boosts and salary
@@ -106,6 +117,14 @@ Gemini uses a two-pass review:
 - pass 1 screens semantic candidates in batches
 - pass 2 globally reranks pass-1 approved candidates
 
+Both passes receive the full `candidate.cv` when provided, alongside the story,
+target profiles, and existing candidate context. The CV is primary evidence of
+what the application demonstrates; target profiles describe desired work, and
+the story supplies additional context. Review distinguishes evidence in the CV
+from story-only claims and does not assume the application will be rewritten.
+Missing skills remain unknown rather than confirmed gaps. Profiles without a
+CV continue to use the existing summary and target-role context.
+
 Successful Gemini decisions are stored as processed/seen whether the job is sent
 or rejected, so the same borderline jobs do not repeatedly return every run.
 Temporary Gemini failures are stored as pending/backlog instead.
@@ -124,5 +143,18 @@ while still allowing practical profile tuning.
 The UI can validate profiles through the same runtime loader used by the scraper,
 save profile versions, compare previous versions, and restore older versions.
 
-The UI does not edit GitHub secrets, local recipient JSON files, or job state
-rows.
+Review Audit has an explicit **Unmark** action on rows recorded as seen. It
+clears the authoritative seen flag for only the selected recipient/job pair,
+sets `processing_status=awaiting_main_run` and
+`classification=manual_reset_unseen`, and clears stale semantic scores. Any
+queued approval for that pair is removed in the same transaction. Previous
+review audit records, other recipients' state, and historical `sent` flags are
+preserved. Missing markers or already-unseen rows are no-ops. Normal job-state
+upserts still preserve seen flags; only this explicit reset clears them.
+
+The job is eligible for the full matching pipeline on rediscovery in a main
+scrape. It is excluded from the support-run backlog so old retrieval decisions
+do not bypass reassessment. Unmarking does not review or email immediately; a
+previously emailed job may be emailed again after approval.
+
+The UI does not edit GitHub secrets or local recipient JSON files.

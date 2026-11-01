@@ -1,8 +1,11 @@
 import unittest
 from pathlib import Path
+from urllib.parse import urlparse
 from unittest.mock import patch
 
-from admin_ui import AdminController, AdminApiError, create_admin_storage, database_label
+from admin_ui import (
+    AdminController, AdminApiError, create_admin_storage, database_label, make_handler,
+)
 from storage import create_storage
 
 
@@ -20,6 +23,41 @@ class AdminUiTests(unittest.TestCase):
             child.unlink()
         self.test_dir.rmdir()
 
+    def test_unmark_job_uses_the_selected_recipient_and_url(self):
+        job = {"url": "https://example.com/job"}
+        self.storage.store_seen_jobs("recipient-a", [job])
+        self.storage.store_seen_jobs("recipient-b", [job])
+        payload = {"recipient_id": "recipient-a", "job_url": job["url"]}
+        result = self.controller.unmark_job(payload)
+        self.assertTrue(result["unmarked"])
+        self.assertEqual("recipient-a", result["recipient_id"])
+        self.assertEqual(job["url"], result["job_url"])
+        self.assertEqual(set(), self.storage.load_seen_urls("recipient-a"))
+        self.assertEqual({job["url"]}, self.storage.load_seen_urls("recipient-b"))
+        self.assertFalse(self.controller.unmark_job(payload)["unmarked"])
+
+    def test_unmark_job_rejects_missing_or_non_text_selections(self):
+        for payload in (None, [], {}, {"recipient_id": "a"},
+                        {"recipient_id": [], "job_url": "https://example.com/job"},
+                        {"recipient_id": "a", "job_url": "  "}):
+            with self.subTest(payload=payload), self.assertRaises(AdminApiError):
+                self.controller.unmark_job(payload)
+
+    def test_unmark_endpoint_dispatches_to_the_controller(self):
+        handler_class = make_handler(self.controller)
+        handler = object.__new__(handler_class)
+        job = {"url": "https://example.com/dispatch"}
+        self.storage.store_seen_jobs("recipient-a", [job])
+        with (
+            patch.object(handler, "_read_json", return_value={
+                "recipient_id": "recipient-a", "job_url": job["url"],
+            }),
+            patch.object(handler, "_send_json") as send_json,
+        ):
+            handler._handle_post(urlparse("/api/jobs/unmark"))
+        self.assertTrue(send_json.call_args.args[0]["unmarked"])
+        self.assertEqual(set(), self.storage.load_seen_urls("recipient-a"))
+
     def test_save_profile_validates_and_writes_db_config(self):
         result = self.controller.save_profile(
             {
@@ -30,6 +68,7 @@ class AdminUiTests(unittest.TestCase):
                 },
                 "candidate": {
                     "summary": "Python projects.",
+                    "cv": "EXPERIENCE\nPython APIs and data processing.\nEDUCATION\nMSc.",
                     "target_roles": [{"id": "swe"}],
                 },
                 "job_preferences": {"location": "Greece"},
@@ -47,6 +86,10 @@ class AdminUiTests(unittest.TestCase):
         self.assertEqual(["swe"], profiles[0]["target_roles"])
 
         loaded = self.controller.get_profile("demo_recipient")
+        self.assertEqual(
+            "EXPERIENCE\nPython APIs and data processing.\nEDUCATION\nMSc.",
+            loaded["profile"]["candidate"]["cv"],
+        )
         self.assertEqual("recipient@example.com", loaded["summary"]["email"])
         self.assertEqual("Greek", loaded["summary"]["language"])
         self.assertEqual("Greece", loaded["summary"]["location"])
@@ -76,6 +119,7 @@ class AdminUiTests(unittest.TestCase):
                 "delivery": {"email": "recipient@example.com"},
                 "candidate": {
                     "summary": "First summary.",
+                    "cv": "Original application CV.",
                     "target_roles": [{"id": "swe"}],
                 },
             }
@@ -86,6 +130,7 @@ class AdminUiTests(unittest.TestCase):
                 "candidate": {
                     **first["profile"]["candidate"],
                     "summary": "Second summary.",
+                    "cv": "Updated application CV.",
                 },
             }
         )
@@ -99,6 +144,8 @@ class AdminUiTests(unittest.TestCase):
         self.assertEqual(2, len(versions))
         self.assertEqual("Second summary.", versions[0]["profile"]["candidate"]["summary"])
         self.assertEqual("First summary.", restored["profile"]["candidate"]["summary"])
+        self.assertEqual("Updated application CV.", versions[0]["profile"]["candidate"]["cv"])
+        self.assertEqual("Original application CV.", restored["profile"]["candidate"]["cv"])
 
     def test_audit_rows_are_filterable_for_the_ui(self):
         self.storage.store_review_audit_rows(

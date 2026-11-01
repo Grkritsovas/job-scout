@@ -103,7 +103,8 @@ The intended steady-state runtime is a scheduled GitHub Actions workflow backed 
 - `examples/preview_digest.py`
   Generate a local HTML/text digest preview from sample data.
 - `admin_ui.py`
-  Run a local admin UI for database-backed recipient profiles and review audit rows.
+  Run a local admin UI for database-backed recipient profiles, review audit rows,
+  and explicit per-recipient/job seen-marker resets.
 - `tools/validate_recipient_profiles.py`
   Validate stored recipient profile JSON through the runtime normalization path.
 - `tools/replay_run.py`
